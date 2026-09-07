@@ -52,11 +52,16 @@ test('sync refuses a wrong secret before reading the body', async () => {
   cleanup()
 })
 
-test('a malformed snapshot is a 400, not a 500', async () => {
+test('a malformed or misdirected snapshot is a 400 {status:invalid}, not a 200 or a 500', async () => {
   const { seo, cleanup } = runtime()
-  const res = await seo.handlers.POST(post('/api/seo/sync', { version: 'x', pages: 'nope' }), ctx('sync'))
-  assert.equal(res.status, 400)
-  assert.equal((await res.json()).status, 'invalid')
+  const malformed = await seo.handlers.POST(post('/api/seo/sync', { nope: true }), ctx('sync'))
+  assert.equal(malformed.status, 400)
+  assert.deepEqual(await malformed.json(), { status: 'invalid', version: 0 })
+  // Once a snapshot is stored, one addressed to another site is refused with the stored version.
+  await seo.handlers.POST(post('/api/seo/sync', snapshot), ctx('sync'))
+  const misdirected = await seo.handlers.POST(post('/api/seo/sync', { ...snapshot, version: 9, siteSlug: 'someone-else' }), ctx('sync'))
+  assert.equal(misdirected.status, 400)
+  assert.deepEqual(await misdirected.json(), { status: 'invalid', version: 1 })
   cleanup()
 })
 
