@@ -8,6 +8,7 @@ use Doitrous\SeoRuntime\Http\Middleware\SeoSecret;
 use Doitrous\SeoRuntime\Store\EloquentStore;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Routing\Router;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\ServiceProvider;
 
@@ -39,6 +40,13 @@ class SeoRuntimeServiceProvider extends ServiceProvider
         });
 
         if ($this->app->runningInConsole()) {
+            // The "pull on boot" of the contract: run once after migrating (the scheduler covers the rest).
+            Artisan::command('seo-runtime:pull', function () {
+                $this->info('pull: ' . app(SeoManager::class)->pull());
+            })->purpose('Pull the SEO snapshot from the hub now');
+            Artisan::command('seo-runtime:health', function () {
+                $this->info('health: ' . (app(SeoManager::class)->sendHealth() ? 'sent' : 'failed'));
+            })->purpose('Send the health ping to the hub now');
             $this->publishes([__DIR__ . '/../config/seo-runtime.php' => config_path('seo-runtime.php')], 'seo-runtime-config');
             $this->publishes([__DIR__ . '/../resources/views' => resource_path('views/vendor/seo-runtime')], 'seo-runtime-views');
         }

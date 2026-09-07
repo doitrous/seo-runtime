@@ -38,7 +38,8 @@ npm i @doitrous/seo-runtime-next
 Call `createSeo({ store, pages, supported, articlePath })` once and wire its pieces into the app
 router's conventions (`generateMetadata`, `app/sitemap.ts`, `app/robots.ts`) — see
 `examples/next-demo`. Redirects run from a `proxy.ts` at the project root built on
-`withSeoRedirects`, exported from `@doitrous/seo-runtime-next`.
+`withSeoRedirects`, imported from `@doitrous/seo-runtime-next/edge` — never from the package root,
+which pulls Node-only modules into the proxy bundle and fails the build.
 
 Next's own router issues a 308 that strips a trailing slash *before* `proxy.ts` ever runs, which
 pre-empts a real redirect on any source path with a trailing slash. Set this in `next.config.ts`
@@ -82,9 +83,10 @@ before the framework's own session/auth stack ever sees the request — in `boot
 ->withMiddleware(fn (Middleware $m) => $m->prependToGroup('web', \Doitrous\SeoRuntime\Http\Middleware\SeoRedirects::class))
 ```
 
-The provider registers the hub pull (boot + every 6 h) and the health ping (hourly) on Laravel's
-own scheduler — a running `php artisan schedule:work` (or the standard cron entry) is all a host
-needs; there is no separate worker to deploy.
+The provider registers the hub pull (every 6 h) and the health ping (hourly) on Laravel's own
+scheduler — a running `php artisan schedule:work` (or the standard cron entry) is all a host needs;
+there is no separate worker to deploy. Run `php artisan seo-runtime:pull` once after migrating so
+the site has a snapshot before the first scheduled tick.
 
 ## Install: WordPress
 
