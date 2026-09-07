@@ -1,0 +1,11 @@
+{
+  "name": "express-demo",
+  "private": true,
+  "type": "module",
+  "scripts": { "start": "node server.mjs" },
+  "dependencies": {
+    "@doitrous/seo-runtime-core": "0.1.0",
+    "@doitrous/seo-runtime-express": "0.1.0",
+    "express": "^5.2.1"
+  }
+}
