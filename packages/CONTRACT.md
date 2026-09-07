@@ -75,7 +75,7 @@ with it. When `settings.indexingEnabled` is false, `robots.index` is false for e
 | `GET /sitemap.xml` | none | See below. |
 | `GET /robots.txt` | none | See below. |
 
-`/sitemap.xml`, `/sitemap-N.xml` and `/robots.txt` are the only anonymous routes.
+`/sitemap.xml` and `/robots.txt` are the only anonymous routes.
 
 Bearer secrets are compared timing-safe. Request bodies over 2 MB are refused with 413, and the
 limit is enforced **on the stream**: `content-length` is absent on a chunked request, so every
