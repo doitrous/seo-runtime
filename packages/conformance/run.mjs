@@ -10,13 +10,13 @@ const base = args.get('base') ?? process.env.CONFORMANCE_BASE
 const secret = args.get('secret') ?? process.env.CONFORMANCE_SECRET
 const slug = args.get('slug') ?? process.env.CONFORMANCE_SLUG ?? 'demo'
 if (!base || !secret) {
-  // Exit 0, not 2: this package is an npm workspace, so a bare `npm test` from the repo root
-  // (`--workspaces --if-present`) invokes this script's own "test" with no flags and no env.
-  // That sweep is for the unit-test workspaces; the conformance suite always needs a live demo
-  // and is run explicitly (with real --base/--secret) from the README or CI — never from the
-  // root's blanket test step. Skipping quietly here is what keeps that step green.
-  console.log('conformance: skipped (no --base/--secret) — run with `node run.mjs --base <url> --secret <secret>`')
-  process.exit(0)
+  // This suite always needs a live demo and is run explicitly, never from the repo root's
+  // blanket `npm test`: packages/conformance's own package.json has no "test" script (it's
+  // named "conformance" instead), so `npm run test --workspaces --if-present` skips this
+  // workspace entirely rather than landing here with no flags. A real invocation missing its
+  // flags is a usage error and must fail loud, not report a phantom success.
+  console.error('usage: node run.mjs --base <url> --secret <secret> [--slug <slug>]')
+  process.exit(2)
 }
 
 const suiteDir = join(dirname(fileURLToPath(import.meta.url)), 'suite')

@@ -15,6 +15,7 @@ test('a known page resolves with the brand suffix and a self canonical', async (
 test('probing without the secret is 401', async () => {
   const res = await fetch(`${BASE}/api/seo/probe?path=/en/a&lang=en`)
   assert.equal(res.status, 401)
+  assert.deepEqual(await res.json(), { error: 'unauthorized' })
 })
 
 test('alternates are reciprocal and carry x-default', async () => {

@@ -53,22 +53,54 @@ test('a different job reusing a live slug is a 409', async () => {
   await articles(payload())
   const res = await articles(payload({ externalId: 902 }))
   assert.equal(res.status, 409)
-  assert.match((await res.json()).error, /slug/)
+  // Exact contract shape (packages/CONTRACT.md): {error:'slug_taken', slug, lang}, not just an
+  // `error` string that happens to mention "slug".
+  assert.deepEqual(await res.json(), { error: 'slug_taken', slug: 'conformance-article', lang: 'en' })
 })
 
-test('a body over 2 MB is refused with 413, chunked or not', async () => {
-  const big = payload()
-  big.articles[0].bodyMd = 'x'.repeat(3 * 1024 * 1024)
-  assert.equal((await articles(big)).status, 413)
-
-  // No content-length: the limit has to be enforced on the stream.
-  const chunk = new TextEncoder().encode('x'.repeat(512 * 1024))
-  const stream = new ReadableStream({ start(c) { for (let i = 0; i < 6; i++) c.enqueue(chunk); c.close() } })
-  const res = await fetch(`${BASE}/api/articles`, {
-    method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' },
-    body: stream, duplex: 'half',
+// The 2 MB ceiling (packages/CONTRACT.md's Security section) is a precise byte boundary, not
+// "somewhere well over 2 MB" — 2,097,152 bytes must go through and 2,097,153 must not, and that
+// has to hold whether the request declares a content-length or streams chunked (no
+// content-length at all, which is what a real chunked upload looks like).
+const MAX = 2 * 1024 * 1024
+const xBytes = (n) => 'x'.repeat(n)
+function chunkedBody(totalBytes, chunkSize = 256 * 1024) {
+  let sent = 0
+  return new ReadableStream({
+    pull(controller) {
+      if (sent >= totalBytes) { controller.close(); return }
+      const n = Math.min(chunkSize, totalBytes - sent)
+      controller.enqueue(new Uint8Array(n).fill(0x78)) // 'x'
+      sent += n
+    },
   })
+}
+const post = (body, extra = {}) => fetch(`${BASE}/api/articles`, {
+  method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body, ...extra,
+})
+
+test('exactly 2,097,152 bytes is not 413, content-length path', async () => {
+  // Not valid JSON (padding is plain 'x's), so this may legitimately answer 400 — the boundary
+  // being asserted is "not 413", per the task: at-limit bodies must clear the byte check.
+  const res = await post(xBytes(MAX))
+  assert.notEqual(res.status, 413)
+})
+
+test('2,097,153 bytes is 413, content-length path', async () => {
+  const res = await post(xBytes(MAX + 1))
   assert.equal(res.status, 413)
+  assert.deepEqual(await res.json(), { error: 'too large' })
+})
+
+test('exactly 2,097,152 bytes is not 413, chunked path (no content-length)', async () => {
+  const res = await post(chunkedBody(MAX), { duplex: 'half' })
+  assert.notEqual(res.status, 413)
+})
+
+test('2,097,153 bytes is 413, chunked path (no content-length)', async () => {
+  const res = await post(chunkedBody(MAX + 1), { duplex: 'half' })
+  assert.equal(res.status, 413)
+  assert.deepEqual(await res.json(), { error: 'too large' })
 })
 
 test('an invalid payload is a 400 naming the field', async () => {
@@ -80,4 +112,5 @@ test('an invalid payload is a 400 naming the field', async () => {
 test('articles without the secret are 401', async () => {
   const res = await fetch(`${BASE}/api/articles`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload()) })
   assert.equal(res.status, 401)
+  assert.deepEqual(await res.json(), { error: 'unauthorized' })
 })

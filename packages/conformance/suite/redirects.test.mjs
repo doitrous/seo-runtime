@@ -18,6 +18,17 @@ test('an inactive redirect does not fire', async () => {
   assert.notEqual((await fetch(`${BASE}/off`, { redirect: 'manual' })).status, 302)
 })
 
+// One active row per redirect type the contract lists (301 is covered above): each must answer
+// with its OWN configured status, not a hard-coded 301 — packages/CONTRACT.md's Redirects
+// section names 301, 302, 307 and 308.
+for (const type of [302, 307, 308]) {
+  test(`a type ${type} redirect answers ${type} with the destination`, async () => {
+    const res = await fetch(`${BASE}/old-${type}`, { redirect: 'manual' })
+    assert.equal(res.status, type)
+    assert.match(res.headers.get('location') ?? '', /\/en\/a$/)
+  })
+}
+
 test('a reserved prefix is never redirected', async () => {
   assert.notEqual((await fetch(`${BASE}/api/old`, { redirect: 'manual' })).status, 301)
 })

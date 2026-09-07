@@ -98,6 +98,13 @@ session middleware, and are skipped for `/api`, `/admin` and every prefix in
 
 Destinations must be site-relative (`/path`) or `https://…`; anything else is dropped at sync time.
 
+**Next.js trailing slashes.** Next's own router issues its own 308 to strip a trailing slash
+*before* a proxy/middleware ever runs, which pre-empts the site's real redirect for any source
+hit with a trailing slash. A Next site consuming `packages/next` for redirects must set
+`skipTrailingSlashRedirect: true` in `next.config.ts` so trailing-slash handling goes through
+`withSeoRedirects` (which already normalizes the path before matching) instead of Next's own
+default. See `examples/next-demo/next.config.ts`.
+
 ## Sitemap
 
 Pages with `includeInSitemap && index` and a non-missing record, plus every stored article URL per

@@ -29,6 +29,9 @@ export const snapshot = (over = {}) => ({
   redirects: [
     { source: '/old', destination: '/en/a', type: 301, active: true },
     { source: '/off', destination: '/en/a', type: 302, active: false },
+    { source: '/old-302', destination: '/en/a', type: 302, active: true },
+    { source: '/old-307', destination: '/en/a', type: 307, active: true },
+    { source: '/old-308', destination: '/en/a', type: 308, active: true },
     { source: '/api/old', destination: '/en/a', type: 301, active: true },
     { source: '/bad', destination: 'http://evil.example', type: 301, active: true },
   ],

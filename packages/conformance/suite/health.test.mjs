@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { BASE, health, healthAnon, nextVersion, snapshot, SLUG, sync } from './fixture.mjs'
+import { articles, BASE, health, healthAnon, nextVersion, snapshot, SLUG, sync } from './fixture.mjs'
 
 test('health requires the secret and reports the contract fields', async () => {
   const v = nextVersion()
   await sync(snapshot({ version: v }))
-  assert.equal((await healthAnon()).status, 401)
+  const anon = await healthAnon()
+  assert.equal(anon.status, 401)
+  assert.deepEqual(await anon.json(), { error: 'unauthorized' })
   const res = await health()
   assert.equal(res.status, 200)
   const body = await res.json()
@@ -49,4 +51,28 @@ test('the page provider lists pages with the contract shape', async () => {
 test('the page provider is refused without the secret', async () => {
   const res = await fetch(`${BASE}/api/seo/pages`)
   assert.equal(res.status, 401)
+  assert.deepEqual(await res.json(), { error: 'unauthorized' })
+})
+
+// packages/CONTRACT.md: "GET /api/seo/pages ... plus the runtime's own article pages at
+// articlePath(lang, slug). Each article appears exactly once per stored language." This
+// ingests one article in two languages and checks both show up, once each, at the demo's
+// default articlePath (/{lang}/blog/{slug}), typed as an article page with an updatedAt.
+test('an ingested article appears once per language in the page provider, at articlePath', async () => {
+  const slug = 'conformance-pages-listing'
+  await articles({
+    externalId: 960,
+    articles: [
+      { lang: 'en', title: 'Listing check', slug, bodyMd: '# Listing check\n\nBody.' },
+      { lang: 'ar', title: 'فحص القائمة', slug, bodyMd: '# فحص القائمة\n\nمتن.' },
+    ],
+  })
+  const res = await fetch(`${BASE}/api/seo/pages`, { headers: { Authorization: `Bearer ${process.env.CONFORMANCE_SECRET}` } })
+  const { pages } = await res.json()
+  for (const lang of ['en', 'ar']) {
+    const matches = pages.filter((p) => p.lang === lang && p.path === `/${lang}/blog/${slug}`)
+    assert.equal(matches.length, 1, `expected exactly one ${lang} page at /${lang}/blog/${slug}`)
+    assert.equal(matches[0].type, 'article')
+    assert.ok(matches[0].updatedAt, 'article page is missing updatedAt')
+  }
 })

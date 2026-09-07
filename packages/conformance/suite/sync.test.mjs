@@ -11,11 +11,15 @@ test('a snapshot is applied and echoed with its version', async () => {
   assert.equal(body.version, v)
 })
 
-test('an older snapshot is answered stale and does not overwrite', async () => {
+test('an older snapshot is answered stale and echoes the stored version', async () => {
   const v = nextVersion()
   await sync(snapshot({ version: v }))
   const res = await sync(snapshot({ version: v - 1 }))
-  assert.equal((await res.json()).status, 'stale')
+  const body = await res.json()
+  assert.equal(body.status, 'stale')
+  // packages/CONTRACT.md: a stale sync is answered with the STORED (higher) version, never the
+  // rejected incoming one.
+  assert.equal(body.version, v)
 })
 
 test('a malformed body is a clean 400, never a 500', async () => {
@@ -31,4 +35,5 @@ test('a malformed body is a clean 400, never a 500', async () => {
 test('sync without the secret is 401', async () => {
   const res = await fetch(`${BASE}/api/seo/sync`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
   assert.equal(res.status, 401)
+  assert.deepEqual(await res.json(), { error: 'unauthorized' })
 })
