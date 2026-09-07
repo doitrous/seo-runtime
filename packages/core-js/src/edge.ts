@@ -7,3 +7,4 @@
  * and the build fails. `packages/core-js/src/edge.test.ts` (B7 Step 8) is what keeps this honest.
  */
 export * from './types.ts'
+export * from './resolve.ts'
