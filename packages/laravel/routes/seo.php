@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Route;
 // Every runtime route is authenticated, health included: it names the site and enumerates every
 // redirect source path. The body limit runs first so an oversized upload is refused before the
 // framework buffers it.
-Route::middleware(['seo.body', 'seo.secret'])->group(function () {
+Route::middleware(['seo.secret', 'seo.body'])->group(function () {   // auth first, then size: same order as the Express and Next packages
     Route::post('/api/seo/sync', [SeoController::class, 'sync']);
     Route::get('/api/seo/pages', [SeoController::class, 'pages']);
     Route::get('/api/seo/probe', [SeoController::class, 'probe']);

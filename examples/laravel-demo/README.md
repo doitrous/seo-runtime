@@ -24,6 +24,12 @@ conformance suite (`packages/conformance`) something to run against.
   app that already has its own `/sitemap.xml` or `/robots.txt` (route or static file) must remove
   it for the same reason.
 
+## Sync and health
+
+The package registers its own scheduled tasks (pull every 6 h, health ping hourly) in its service
+provider; a host only needs the Laravel scheduler running (`php artisan schedule:work` locally, the
+usual `* * * * * php artisan schedule:run` cron entry in production). Nothing runs on page render.
+
 ## Running it
 
 ```bash
