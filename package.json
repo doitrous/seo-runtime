@@ -8,5 +8,5 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present"
   },
-  "devDependencies": { "typescript": "^5.7.0" }
+  "devDependencies": { "typescript": "^5.7.0", "@types/node": "^24.0.0" }
 }

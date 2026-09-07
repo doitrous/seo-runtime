@@ -1,0 +1,22 @@
+{
+  "name": "@doitrous/seo-runtime-core",
+  "version": "0.1.0",
+  "description": "Stack-agnostic core of the seo-hub runtime: store, resolveSeo, redirects, sitemap, robots, article ingest, sync.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./edge": "./dist/edge.js",
+    "./package.json": "./package.json"
+  },
+  "files": ["dist", "src/migrations"],
+  "publishConfig": { "access": "public" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test --experimental-strip-types --disable-warning=ExperimentalWarning src/*.test.ts src/stores/*.test.ts"
+  },
+  "dependencies": { "marked": "^15.0.12" }
+}
