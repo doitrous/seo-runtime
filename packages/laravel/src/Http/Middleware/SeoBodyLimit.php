@@ -17,6 +17,12 @@ class SeoBodyLimit
      * read body rather than a streaming one; `post_max_size` is the outer guard and the
      * demo/site docs set it well above 2M so it never fires first and masks this 413 with a
      * generic PHP-level rejection.
+     *
+     * This is deliberately not the streaming counting-reader the JS stacks use: PHP's SAPI has
+     * already buffered the whole request body before user code — this middleware included — ever
+     * runs, so there is no earlier point in a Laravel app to abort a read mid-stream. The 413 is
+     * still correct, just answered after the buffer exists rather than while the bytes arrive;
+     * see CONTRACT.md's body-limit paragraph.
      */
     public function handle(Request $request, Closure $next): Response
     {

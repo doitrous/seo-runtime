@@ -32,7 +32,10 @@ class SeoManager
 
     public function redirect(string $path): ?array
     {
-        $reserved = $this->store->getSettings()['reservedPrefixes'] ?? ['/api', '/admin'];
+        // No `?? ['/api', '/admin']` fallback: matchRedirect itself unions the default reserved
+        // prefixes into whatever is passed, so `reservedPrefixes: []` from the hub can never
+        // unreserve them.
+        $reserved = $this->store->getSettings()['reservedPrefixes'] ?? [];
 
         return Snapshot::matchRedirect($path, $this->store, $reserved);
     }

@@ -14,9 +14,10 @@ class Sitemap
         return str_replace(['&', '<', '>', '"', "'"], ['&amp;', '&lt;', '&gt;', '&quot;', '&apos;'], $s);
     }
 
+    /** Omits lastmod for anything that is not at least a 10-char ISO date, mirroring sitemap.ts's NaN guard. */
     private static function day(string $iso): ?string
     {
-        return $iso === '' ? null : substr($iso, 0, 10);
+        return strlen($iso) >= 10 ? substr($iso, 0, 10) : null;
     }
 
     private static function withDefault(array $alternates): array
@@ -42,11 +43,12 @@ class Sitemap
             $group = $p['group'] ? ($byGroup[$p['group']] ?? [$p]) : [$p];
             $alternates = [];
             foreach ($group as $g) $alternates[$g['lang']] = Snapshot::absoluteUrl($s, $g['lang'], $g['path']);
+            $typeDefaults = $s['pageDefaults'][$p['type']] ?? Snapshot::DEFAULT_PAGE_DEFAULTS;
             $out[] = [
                 'loc' => Snapshot::absoluteUrl($s, $p['lang'], $p['path']),
                 'lastmod' => self::day($p['updatedAt']),
-                'changefreq' => ($s['pageDefaults'][$p['type']] ?? Snapshot::DEFAULT_PAGE_DEFAULTS)['changefreq'],
-                'priority' => $p['seo']['priority'],
+                'changefreq' => $typeDefaults['changefreq'],
+                'priority' => $p['seo']['priority'] ?? $typeDefaults['priority'] ?? 0.5,
                 'alternates' => self::withDefault($alternates),
             ];
         }
@@ -95,26 +97,9 @@ class Sitemap
     }
 
     /**
-     * Not wired up in phase 1: `xml()` throws above PAGE_SIZE rather than paging, so nothing ever
-     * calls this yet. Kept because it is cheap and B11b (or phase 2) needs exactly this shape for
-     * the deferred `/sitemap-N.xml` index.
-     */
-    public static function indexXml(string $baseUrl, int $pageCount): string
-    {
-        $base = rtrim($baseUrl, '/');
-        $items = '';
-        for ($i = 1; $i <= $pageCount; $i++) {
-            $items .= '<sitemap><loc>' . self::xmlEscape("$base/sitemap-$i.xml") . '</loc></sitemap>';
-        }
-
-        return '<?xml version="1.0" encoding="UTF-8"?>' . "\n"
-            . '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . $items . '</sitemapindex>';
-    }
-
-    /**
      * Phase 1 ships a single /sitemap.xml: above PAGE_SIZE URLs this throws rather than silently
      * truncating or paging. The sitemap index that would split a bigger site across
-     * /sitemap-N.xml is deferred to phase 2 (controller ruling for this task) — see indexXml().
+     * /sitemap-N.xml is deferred to phase 2 (controller ruling for this task).
      */
     public static function xml(EloquentStore $store): string
     {

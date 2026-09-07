@@ -104,6 +104,20 @@ class ArticlesTest extends TestCase
         $this->assertSame(['zz'], Articles::toRows($p, ['en', 'ar'])['skipped']);
     }
 
+    public function test_remote_url_uses_each_languages_own_base_url(): void
+    {
+        $store = $this->store();
+        $snap = $this->snapshot();
+        $snap['settings']['baseUrls'] = ['en' => 'https://x.com', 'ar' => 'https://ar.x.com'];
+        Snapshot::apply($store, $snap);
+        $payload = $this->payload();
+        $payload['articles'][] = array_merge($payload['articles'][0], ['lang' => 'ar', 'slug' => 'hair-ar']);
+        $out = Articles::ingest($store, $payload, ['en', 'ar']);
+        $byLang = array_column($out['body']['results'], 'remoteUrl', 'lang');
+        $this->assertSame('https://x.com/en/blog/hair', $byLang['en']);
+        $this->assertSame('https://ar.x.com/ar/blog/hair-ar', $byLang['ar']);
+    }
+
     public function test_a_second_job_reusing_a_live_slug_is_a_409(): void
     {
         $store = $this->store();

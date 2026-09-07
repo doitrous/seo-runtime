@@ -78,6 +78,25 @@ class SitemapTest extends TestCase
         $this->assertStringNotContainsString('Sitemap:', $txt);
     }
 
+    public function test_a_page_with_no_priority_falls_back_to_the_type_default(): void
+    {
+        $store = $this->store();
+        $s = $this->snapshot(['version' => 22]);
+        $s['pages'][0]['seo']['priority'] = null;
+        Snapshot::apply($store, $s);
+        // pageDefaults.page.priority is 0.7 in the fixture (TestCase::snapshot).
+        $this->assertStringContainsString('<priority>0.7</priority>', Sitemap::xml($store));
+    }
+
+    public function test_an_unparsable_updated_at_omits_lastmod_instead_of_erroring(): void
+    {
+        $store = $this->store();
+        $s = $this->snapshot(['version' => 23]);
+        $s['pages'][0]['updatedAt'] = 'bad';
+        Snapshot::apply($store, $s);
+        $this->assertStringNotContainsString('<lastmod>', Sitemap::xml($store));
+    }
+
     public function test_an_article_is_listed_at_the_configured_article_path(): void
     {
         $store = $this->store();

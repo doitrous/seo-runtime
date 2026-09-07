@@ -51,6 +51,24 @@ class SnapshotTest extends TestCase
         $this->assertNull(Snapshot::matchRedirect('/api/old', $store, $reserved));
     }
 
+    /**
+     * Every browser normalizes a leading "/\" exactly like "//" (`new URL('/\\evil.com', base)`
+     * resolves to `https://evil.com/`), so safeDestination must reject it the same way.
+     */
+    public function test_a_backslash_right_after_the_leading_slash_is_rejected(): void
+    {
+        $this->assertNull(Snapshot::safeDestination('/\\evil.com'));
+    }
+
+    public function test_an_empty_configured_reserved_prefixes_cannot_unreserve_api_or_admin(): void
+    {
+        $store = $this->store();
+        $s = $this->snapshot();
+        $s['redirects'][] = ['source' => '/api/seo/sync', 'destination' => '/elsewhere', 'type' => 301, 'active' => true];
+        Snapshot::apply($store, $s);
+        $this->assertNull(Snapshot::matchRedirect('/api/seo/sync', $store, []));
+    }
+
     public function test_resolve_matches_the_javascript_precedence(): void
     {
         $store = $this->store();
@@ -141,6 +159,15 @@ class SnapshotTest extends TestCase
         $this->assertStringNotContainsString('\\/', $body);
         $this->assertStringContainsString('https://schema.org', $body);
         $this->assertStringContainsString('مقالة', $body);
+    }
+
+    public function test_a_cold_store_refuses_a_snapshot_for_another_site_when_a_slug_is_configured(): void
+    {
+        config()->set('seo-runtime.slug', 'demo');
+        $store = $this->store();
+        $this->assertSame('invalid', Snapshot::apply($store, $this->snapshot(['siteSlug' => 'other']))['status']);
+        $this->assertNull($store->getSnapshot());
+        $this->assertSame('applied', Snapshot::apply($store, $this->snapshot(['siteSlug' => 'demo']))['status']);
     }
 
     public function test_a_store_failure_never_breaks_resolve_but_is_counted(): void

@@ -195,16 +195,16 @@ class Articles
             }
         }
 
-        $settings = $store->getSettings() ?? [];
-        $urls = $settings['baseUrls'] ?? [];
-        $origin = rtrim(reset($urls) ?: '', '/');
+        $settings = $store->getSettings() ?? Snapshot::EMPTY_SETTINGS;
         $articlePath = self::articlePath();
         $results = [];
         foreach ($rows as $row) {
             $store->upsertArticle($row);
             $results[] = [
                 'lang' => $row['lang'], 'remoteId' => $row['externalId'] . ':' . $row['lang'],
-                'remoteUrl' => $origin . $articlePath($row['lang'], $row['slug']),
+                // The language's own base URL, not just the first configured one —
+                // Snapshot::absoluteUrl already carries that fallback for a language with none.
+                'remoteUrl' => Snapshot::absoluteUrl($settings, $row['lang'], $articlePath($row['lang'], $row['slug'])),
             ];
         }
 

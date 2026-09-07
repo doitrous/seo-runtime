@@ -19,6 +19,9 @@ class Snapshot
 
     public const DEFAULT_PAGE_DEFAULTS = ['titleTemplate' => '%s', 'schemaType' => 'WebPage', 'changefreq' => 'monthly', 'priority' => 0.5];
 
+    /** /api and /admin are unconditionally reserved — see matchRedirect(). */
+    public const DEFAULT_RESERVED = ['/api', '/admin'];
+
     public const EMPTY_META = ['title' => '', 'description' => '', 'image' => ''];
 
     /** How many times a store read has thrown since boot. Reported by the health ping. */
@@ -57,7 +60,9 @@ class Snapshot
     public static function safeDestination(mixed $dest): ?string
     {
         $d = trim((string) $dest);
-        if ($d === '' || str_starts_with($d, '//')) return null;
+        // "/\host" is scheme-relative too: every browser normalizes a leading /\ exactly like //
+        // (new URL('/\\evil.com', base) resolves to https://evil.com/), so both are rejected.
+        if ($d === '' || preg_match('#^/[/\\\\]#', $d) === 1) return null;
         if (str_starts_with($d, '/')) return $d;
 
         return preg_match('#^https://\S+$#i', $d) ? $d : null;
@@ -116,13 +121,18 @@ class Snapshot
      * applySnapshot in sync.ts: a version below the stored one is ignored, and a snapshot
      * addressed to a different site is refused outright — a runtime must never render another
      * site's pages because a slug was mistyped in the hub. An equal version re-applies.
+     *
+     * On a cold store there is no stored siteSlug to check against, so `config('seo-runtime.slug')`
+     * stands in for it when configured — the boot state is exactly when a mistyped hub slug would
+     * otherwise seed the wrong site's pages with no prior snapshot to catch it.
      */
     public static function apply(EloquentStore $store, mixed $incoming): array
     {
         if (!self::isSnapshot($incoming)) return ['status' => 'invalid', 'version' => 0];
         $current = $store->getSnapshot();
-        if ($current && $current['siteSlug'] && $incoming['siteSlug'] !== $current['siteSlug']) {
-            return ['status' => 'invalid', 'version' => $current['version']];
+        $expectedSlug = ($current['siteSlug'] ?? '') ?: (string) config('seo-runtime.slug', '');
+        if ($expectedSlug !== '' && $incoming['siteSlug'] !== $expectedSlug) {
+            return ['status' => 'invalid', 'version' => $current['version'] ?? 0];
         }
         if ($current && $incoming['version'] < $current['version']) {
             return ['status' => 'stale', 'version' => $current['version']];
@@ -248,7 +258,10 @@ class Snapshot
     {
         try {
             $path = self::normalizePath(str_starts_with($url, 'http') ? (parse_url($url, PHP_URL_PATH) ?: '/') : $url);
-            if (self::isReserved($path, $reserved)) return null;
+            // Unioned rather than defaulted: a hub-configured `reservedPrefixes: []` must never be
+            // able to unreserve /api or /admin.
+            $effective = array_values(array_unique(array_merge(self::DEFAULT_RESERVED, $reserved)));
+            if (self::isReserved($path, $effective)) return null;
             $row = $store->getRedirect($path);
             if (!$row) return null;
             $destination = self::safeDestination($row['destination']);
