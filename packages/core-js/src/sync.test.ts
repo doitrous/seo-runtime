@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { applySnapshot, sanitizeSnapshot } from './sync.ts'
-import { healthPayload } from './health.ts'
+import { healthPayload, MAX_REDIRECT_HITS } from './health.ts'
 import { EMPTY_META, EMPTY_SETTINGS, type Snapshot } from './types.ts'
 import { JsonFileStore } from './stores/json-file.ts'
 import { mkdtempSync, rmSync } from 'node:fs'
@@ -92,6 +92,18 @@ test('the health payload carries version, counts and the hit deltas, and does NO
   // Reading health twice reports the same deltas: only a 2xx from the hub clears them, so a
   // ping that never arrives loses nothing.
   assert.deepEqual((await healthPayload(store, '0.1.0', 'x')).redirectHits, [{ source: '/a', hits: 2 }])
+  cleanup()
+})
+
+test('the health payload reports at most MAX_REDIRECT_HITS sources, busiest first', async () => {
+  const { store, cleanup } = tmpStore()
+  const redirects = Array.from({ length: MAX_REDIRECT_HITS + 5 }, (_, i) => ({ source: `/r${i}`, destination: '/b', type: 301 as const, active: true }))
+  await applySnapshot(store, snap({ redirects }))
+  for (const r of redirects) await store.incrementHit(r.source)
+  await store.incrementHit('/r7')
+  const h = await healthPayload(store, '0.1.0', 'x')
+  assert.equal(h.redirectHits.length, MAX_REDIRECT_HITS)
+  assert.deepEqual(h.redirectHits[0], { source: '/r7', hits: 2 })
   cleanup()
 })
 

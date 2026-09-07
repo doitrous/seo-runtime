@@ -2,6 +2,9 @@ import type { SeoStore } from './store.ts'
 import { readConfig } from './config.ts'
 import { storeFailures } from './resolve.ts'
 
+/** The hub rejects a health body with more redirect entries than this (400). */
+export const MAX_REDIRECT_HITS = 1000
+
 export type HealthBody = {
   version: string; siteSlug: string; lastSyncAt: string | null; snapshotVersion: number
   counts: { pages: number; redirects: number; articles: number; storeFailures: number }
@@ -27,7 +30,10 @@ export async function healthPayload(store: SeoStore, version: string, slug: stri
       // permanently broken store until somebody noticed a blank <title>.
       storeFailures: storeFailures(),
     },
-    redirectHits: hits,
+    // The hub caps the list; the busiest sources go first and the rest wait for the next ping
+    // (takeHits drains only what was reported).
+    redirectHits: hits.filter((h) => Number.isFinite(h.hits) && h.hits > 0)
+      .sort((a, b) => b.hits - a.hits).slice(0, MAX_REDIRECT_HITS),
   }
 }
 
