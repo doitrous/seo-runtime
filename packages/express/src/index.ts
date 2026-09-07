@@ -173,6 +173,11 @@ export function seoRuntime(opts: ExpressSeoOptions) {
       }
     })
 
+    // Anything else under /api/seo is authenticated before it is a 404, like the Next package:
+    // the prefix never confirms which routes exist to an anonymous caller. (`app.use` with a
+    // mount path is prefix matching on both Express 4 and 5; no wildcard syntax needed.)
+    app.use('/api/seo', auth, (_req, res) => { res.status(404).json({ error: 'not found' }) })
+
     app.get('/robots.txt', async (_req, res) => {
       res.type('text/plain').send(robotsTxt(await opts.store.getSnapshot()))
     })

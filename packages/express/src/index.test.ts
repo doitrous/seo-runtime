@@ -55,7 +55,7 @@ test('sync applies a snapshot and answers with the version', async (t) => {
 
 test('every route but the sitemap and robots needs the bearer secret', async (t) => {
   const { url } = await boot(t)
-  for (const [method, path] of [['GET', '/api/seo/pages'], ['GET', '/api/seo/health'], ['GET', '/api/seo/probe'], ['POST', '/api/seo/sync'], ['POST', '/api/articles']] as const) {
+  for (const [method, path] of [['GET', '/api/seo/pages'], ['GET', '/api/seo/health'], ['GET', '/api/seo/probe'], ['POST', '/api/seo/sync'], ['POST', '/api/articles'], ['GET', '/api/seo/bogus']] as const) {
     const res = await fetch(`${url}${path}`, { method })
     assert.equal(res.status, 401, `${method} ${path}`)
   }
@@ -63,6 +63,9 @@ test('every route but the sitemap and robots needs the bearer secret', async (t)
   const robots = await fetch(`${url}/robots.txt`)
   assert.equal(sitemap.status, 200)
   assert.equal(robots.status, 200)
+  const bogus = await fetch(`${url}/api/seo/bogus`, { headers: authed })
+  assert.equal(bogus.status, 404)
+  assert.deepEqual(await bogus.json(), { error: 'not found' })
 })
 
 test('a malformed JSON body is a 400, never a 500', async (t) => {
