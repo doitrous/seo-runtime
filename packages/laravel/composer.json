@@ -1,0 +1,22 @@
+{
+  "name": "doitrous/seo-runtime-laravel",
+  "description": "seo-hub runtime for Laravel: page SEO, redirects, sitemap, robots, article ingest.",
+  "license": "MIT",
+  "require": {
+    "php": "^8.2",
+    "illuminate/support": "^10.0|^11.0|^12.0",
+    "illuminate/database": "^10.0|^11.0|^12.0",
+    "league/commonmark": "^2.4"
+  },
+  "require-dev": {
+    "orchestra/testbench": "^9.0|^10.0",
+    "phpunit/phpunit": "^11.0"
+  },
+  "autoload": {
+    "psr-4": { "Doitrous\\SeoRuntime\\": "src/" }
+  },
+  "autoload-dev": {
+    "psr-4": { "Doitrous\\SeoRuntime\\Tests\\": "tests/" }
+  },
+  "minimum-stability": "stable"
+}

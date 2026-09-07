@@ -3,6 +3,9 @@ dist/
 *.tsbuildinfo
 .seo-runtime.json
 examples/*/vendor/
+packages/laravel/vendor/
+packages/laravel/composer.lock
+packages/laravel/.phpunit.result.cache
 .next/
 next-env.d.ts
 examples/*/AGENTS.md
