@@ -41,7 +41,7 @@ export function composeSeo(
   const typeDefaults = (page && s.pageDefaults[page.type]) || DEFAULT_PAGE_DEFAULTS
   const seo = page?.seo
 
-  const templated = page ? typeDefaults.titleTemplate.replace('%s', page.title) : s.organization.name
+  const templated = page ? typeDefaults.titleTemplate.replace('%s', () => page.title) : s.organization.name
   const rawTitle = seo?.seoTitle?.trim() || templated || ''
   const suffix = s.brandSuffix ?? ''
   const title = rawTitle && suffix && !rawTitle.endsWith(suffix) ? `${rawTitle}${suffix}` : rawTitle

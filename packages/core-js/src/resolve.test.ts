@@ -156,3 +156,8 @@ test('resolveSeo swallows a store failure and counts it', async () => {
   // a mysteriously blank <title>.
   assert.equal(storeFailures(), before + 1)
 })
+
+test('a page title containing $& is inserted literally into the title template', () => {
+  const r = composeSeo({ ...page, title: 'Anna $& Fahmy', seo: { ...page.seo, seoTitle: '' } }, settings, page.path, 'en')
+  assert.equal(r.title, 'Anna $& Fahmy, dermatologist | X')
+})
