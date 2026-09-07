@@ -1,0 +1,12 @@
+{
+  "name": "next-demo",
+  "private": true,
+  "type": "module",
+  "scripts": { "dev": "next dev -p 3101", "build": "next build", "start": "next start -p 3101" },
+  "dependencies": {
+    "@doitrous/seo-runtime-core": "0.1.0",
+    "@doitrous/seo-runtime-next": "0.1.0",
+    "next": "^15.0.0", "react": "^19.0.0", "react-dom": "^19.0.0"
+  },
+  "devDependencies": { "@types/react": "^19.0.0", "@types/react-dom": "^19.0.0" }
+}
