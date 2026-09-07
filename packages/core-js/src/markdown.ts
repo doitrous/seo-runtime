@@ -46,8 +46,11 @@ export function intro(md: string): string {
 }
 
 /** `<` escaped so a literal "</script>" inside a string value cannot close the tag. */
+/** One JSON-LD entry as script text: `<` becomes `\\u003c` so `</script>` cannot break out. */
+export function jsonLdBody(entry: Record<string, unknown>): string {
+  return JSON.stringify(entry).replace(/</g, '\\u003c')
+}
+
 export function jsonLdScript(entries: Record<string, unknown>[]): string {
-  return entries
-    .map((e) => `<script type="application/ld+json">${JSON.stringify(e).replace(/</g, '\\u003c')}</script>`)
-    .join('')
+  return entries.map((e) => `<script type="application/ld+json">${jsonLdBody(e)}</script>`).join('')
 }
