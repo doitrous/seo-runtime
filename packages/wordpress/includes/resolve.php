@@ -34,7 +34,9 @@ function doitrous_seo_is_schema_org(mixed $entry): bool {
 
 function doitrous_seo_safe_destination(mixed $dest): ?string {
     $d = trim((string) $dest);
-    if ($d === '' || str_starts_with($d, '//')) return null;
+    // "/\host" is scheme-relative too: every browser normalizes a leading /\ exactly like //
+    // (new URL('/\\evil.com', base) resolves to https://evil.com/), so both are rejected.
+    if ($d === '' || preg_match('#^/[/\\\\]#', $d) === 1) return null;
     if (str_starts_with($d, '/')) return $d;
 
     return preg_match('#^https://\S+$#i', $d) ? $d : null;
@@ -79,11 +81,21 @@ function doitrous_seo_sanitize(array $s): array {
     return $s;
 }
 
+/**
+ * On a cold store (nothing synced yet) there is no stored siteSlug to check against, so the
+ * SEO_SITE_SLUG constant/env var stands in for it when set — the boot state is exactly when a
+ * mistyped hub slug would otherwise seed the wrong site's pages with no prior snapshot to catch it.
+ */
+function doitrous_seo_configured_slug(): string {
+    return (string) (defined('SEO_SITE_SLUG') ? SEO_SITE_SLUG : getenv('SEO_SITE_SLUG'));
+}
+
 function doitrous_seo_apply(mixed $incoming): array {
     if (!doitrous_seo_is_snapshot($incoming)) return ['status' => 'invalid', 'version' => 0];
     $current = doitrous_seo_get_snapshot();
-    if ($current && ($current['siteSlug'] ?? '') !== '' && $incoming['siteSlug'] !== $current['siteSlug']) {
-        return ['status' => 'invalid', 'version' => $current['version']];
+    $expectedSlug = ($current['siteSlug'] ?? '') ?: doitrous_seo_configured_slug();
+    if ($expectedSlug !== '' && $incoming['siteSlug'] !== $expectedSlug) {
+        return ['status' => 'invalid', 'version' => $current['version'] ?? 0];
     }
     if ($current && $incoming['version'] < $current['version']) {
         return ['status' => 'stale', 'version' => $current['version']];
@@ -162,13 +174,36 @@ function doitrous_seo_compose(?array $page, array $settings, string $path, strin
     ];
 }
 
-/** Two per-key reads, never a whole-store scan on the render path. Never throws. */
+/**
+ * How many times a store read has thrown since this request began. Reported by the health ping
+ * instead of a hard-coded 0. `$increment` is an internal detail of this one-function counter
+ * pattern (a plugin file, not a class, so there is no static property to hold it) — callers only
+ * ever read it with no argument.
+ */
+function doitrous_seo_store_failures(int $increment = 0): int {
+    static $failures = 0;
+    if ($increment) $failures += $increment;
+
+    return $failures;
+}
+
+/**
+ * Two per-key reads, never a whole-store scan on the render path. Never throws: a corrupt
+ * `doitrous_seo_snapshot` option degrades to the empty resolved shape instead of fataling inside
+ * `wp_head`, matching the try/catch every other port's resolve() already has.
+ */
 function doitrous_seo_resolve(string $path, string $lang): array {
     $p = doitrous_seo_normalize_path($path);
-    $settings = doitrous_seo_get_settings() ?: DOITROUS_SEO_EMPTY_SETTINGS;
-    $page = doitrous_seo_get_page($p, $lang);
-    if (!$page) return doitrous_seo_compose(null, $settings, $p, $lang);
-    $group = $page['group'] ? doitrous_seo_list_group($page['group']) : [];
+    try {
+        $settings = doitrous_seo_get_settings() ?: DOITROUS_SEO_EMPTY_SETTINGS;
+        $page = doitrous_seo_get_page($p, $lang);
+        if (!$page) return doitrous_seo_compose(null, $settings, $p, $lang);
+        $group = $page['group'] ? doitrous_seo_list_group($page['group']) : [];
 
-    return doitrous_seo_compose($page, $settings, $p, $lang, $group ?: [$page]);
+        return doitrous_seo_compose($page, $settings, $p, $lang, $group ?: [$page]);
+    } catch (\Throwable $e) {
+        doitrous_seo_store_failures(1);
+
+        return doitrous_seo_compose(null, DOITROUS_SEO_EMPTY_SETTINGS, $p, $lang);
+    }
 }

@@ -129,7 +129,7 @@ function doitrous_seo_health_payload(): array {
             'pages' => count($snapshot['pages'] ?? []),
             'redirects' => count($snapshot['redirects'] ?? []),
             'articles' => count(doitrous_seo_list_articles()),
-            'storeFailures' => 0,
+            'storeFailures' => doitrous_seo_store_failures(),
         ],
         // Busiest sources first, capped at 1,000: the rest wait for the next ping.
         'redirectHits' => doitrous_seo_top_hits(doitrous_seo_peek_hits()),

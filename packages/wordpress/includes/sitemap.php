@@ -22,6 +22,11 @@ function doitrous_seo_with_default(array $alternates): array {
     return $alternates;
 }
 
+/** Omits lastmod for anything shorter than a 10-char ISO date, mirroring sitemap.ts's NaN guard. */
+function doitrous_seo_sitemap_lastmod(string $iso): ?string {
+    return strlen($iso) >= 10 ? substr($iso, 0, 10) : null;
+}
+
 /** Ports core-js's sitemapEntries field for field. */
 function doitrous_seo_sitemap_entries(array $snapshot, array $articles): array {
     $s = $snapshot['settings'];
@@ -35,11 +40,12 @@ function doitrous_seo_sitemap_entries(array $snapshot, array $articles): array {
         $group = $p['group'] ? ($byGroup[$p['group']] ?? [$p]) : [$p];
         $alternates = [];
         foreach ($group as $g) $alternates[$g['lang']] = doitrous_seo_absolute_url($s, $g['lang'], $g['path']);
+        $typeDefaults = $s['pageDefaults'][$p['type']] ?? DOITROUS_SEO_PAGE_DEFAULTS;
         $out[] = [
             'loc' => doitrous_seo_absolute_url($s, $p['lang'], $p['path']),
-            'lastmod' => $p['updatedAt'] === '' ? null : substr($p['updatedAt'], 0, 10),
-            'changefreq' => ($s['pageDefaults'][$p['type']] ?? DOITROUS_SEO_PAGE_DEFAULTS)['changefreq'],
-            'priority' => $p['seo']['priority'],
+            'lastmod' => doitrous_seo_sitemap_lastmod($p['updatedAt']),
+            'changefreq' => $typeDefaults['changefreq'],
+            'priority' => $p['seo']['priority'] ?? $typeDefaults['priority'] ?? 0.5,
             'alternates' => doitrous_seo_with_default($alternates),
         ];
     }
@@ -55,7 +61,7 @@ function doitrous_seo_sitemap_entries(array $snapshot, array $articles): array {
         foreach ($group as $a) {
             $out[] = [
                 'loc' => doitrous_seo_absolute_url($s, $a['lang'], doitrous_seo_article_path($a['lang'], $a['slug'])),
-                'lastmod' => $a['updatedAt'] === '' ? null : substr($a['updatedAt'], 0, 10),
+                'lastmod' => doitrous_seo_sitemap_lastmod($a['updatedAt']),
                 'changefreq' => $articleDefaults['changefreq'],
                 // Same fallback chain as a page: the type default, then DOITROUS_SEO_PAGE_DEFAULTS.
                 // No per-type magic number.

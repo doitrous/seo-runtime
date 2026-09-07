@@ -125,6 +125,45 @@ $html = doitrous_seo_head_tags($evilSeo);
 check('the raw payload never appears as an executable </script> tag', !str_contains($html, '</script><script>alert(1)</script>'));
 check('the "<" is escaped as the six-character \u003c sequence', str_contains($html, '\u003c/script>'));
 
+// === safe redirect destinations ===========================================================
+
+// Every browser normalizes a leading "/\" exactly like "//" (`new URL('/\\evil.com', base)`
+// resolves to `https://evil.com/`), so safe_destination must reject it the same way.
+check('a leading /\\ is rejected like a scheme-relative destination', doitrous_seo_safe_destination('/\\evil.com') === null);
+
+// === resolve() never fatals, even on a corrupt stored page ================================
+
+$corruptPage = [
+    'key' => 'bad:1', 'type' => 'page', 'lang' => 'en', 'path' => '/en/bad', 'group' => '',
+    'title' => 'Bad', 'updatedAt' => '2026-01-01T00:00:00Z',
+    'seo' => [
+        'seoTitle' => '', 'metaDescription' => '', 'canonical' => '', 'index' => true, 'follow' => true,
+        'includeInSitemap' => true, 'priority' => 0.5, 'og' => ['title' => '', 'description' => '', 'image' => ''],
+        'twitter' => ['title' => '', 'description' => '', 'image' => ''], 'schemaType' => '',
+        // Wrong type on purpose: array_filter() on a non-array throws a TypeError, which is what
+        // this section checks doitrous_seo_resolve catches rather than fataling inside wp_head.
+        'structuredData' => 'not-an-array', 'faq' => [],
+    ],
+];
+$GLOBALS['__wp_options']['doitrous_seo_snapshot'] = [
+    'version' => 1, 'siteSlug' => '', 'settings' => DOITROUS_SEO_EMPTY_SETTINGS, 'pages' => [$corruptPage], 'redirects' => [],
+];
+$failuresBefore = doitrous_seo_store_failures();
+$corruptSeo = doitrous_seo_resolve('/en/bad', 'en');
+check('a corrupt page degrades to the empty resolved shape instead of fataling', $corruptSeo['title'] === '');
+check('the store-failure counter increments on the caught throwable', doitrous_seo_store_failures() === $failuresBefore + 1);
+
+// === a cold store refuses a snapshot for another site when SEO_SITE_SLUG is configured ======
+
+$GLOBALS['__wp_options'] = [];
+define('SEO_SITE_SLUG', 'demo');
+$forOther = ['version' => 1, 'siteSlug' => 'other', 'settings' => DOITROUS_SEO_EMPTY_SETTINGS, 'pages' => [], 'redirects' => []];
+$rejected = doitrous_seo_apply($forOther);
+check('a mismatched siteSlug is refused on a cold store', $rejected['status'] === 'invalid');
+check('the store is still empty after the refusal', doitrous_seo_get_snapshot() === null);
+$forMe = ['version' => 1, 'siteSlug' => 'demo', 'settings' => DOITROUS_SEO_EMPTY_SETTINGS, 'pages' => [], 'redirects' => []];
+check('the configured siteSlug still applies normally', doitrous_seo_apply($forMe)['status'] === 'applied');
+
 // === hit take/peek semantics =================================================================
 
 $GLOBALS['__wp_options'] = []; // reset options between sections

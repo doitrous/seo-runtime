@@ -307,6 +307,22 @@ check(
     doitrous_seo_sitemap_entries($snapKillSwitch, []) === [],
 );
 
+$snapNoPriority = make_snapshot();
+$snapNoPriority['pages'] = [make_page('en', '/en/a')];
+$snapNoPriority['pages'][0]['seo']['priority'] = null;
+check(
+    'a page with no priority falls back to the type default, then 0.5',
+    doitrous_seo_sitemap_entries($snapNoPriority, [])[0]['priority'] === 0.5,
+);
+
+$snapBadDate = make_snapshot();
+$snapBadDate['pages'] = [make_page('en', '/en/a')];
+$snapBadDate['pages'][0]['updatedAt'] = 'bad';
+check(
+    'an unparsable updatedAt omits lastmod instead of substr-mangling it',
+    doitrous_seo_sitemap_entries($snapBadDate, [])[0]['lastmod'] === null,
+);
+
 $snapArticles = make_snapshot();
 $snapArticles['pages'] = [];
 $article = [

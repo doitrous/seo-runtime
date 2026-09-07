@@ -22,8 +22,10 @@ function doitrous_seo_apply_redirect(): void {
     if (is_admin()) return;
     $path = doitrous_seo_normalize_path(parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/');
     $settings = doitrous_seo_get_settings() ?? [];
-    // /wp-admin and /wp-json are always reserved, on top of whatever the hub configured.
-    $reserved = array_merge($settings['reservedPrefixes'] ?? ['/api', '/admin'], ['/wp-admin', '/wp-json', '/wp-login.php']);
+    // /api, /admin, /wp-admin and /wp-json are always reserved, on top of whatever the hub
+    // configured — unioned in, not defaulted, so `reservedPrefixes: []` from the hub can never
+    // unreserve /api or /admin.
+    $reserved = array_merge(['/api', '/admin'], $settings['reservedPrefixes'] ?? [], ['/wp-admin', '/wp-json', '/wp-login.php']);
     if (doitrous_seo_is_reserved($path, $reserved)) return;
     $row = doitrous_seo_get_redirect($path);
     if (!$row) return;
