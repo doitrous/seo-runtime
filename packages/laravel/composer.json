@@ -18,5 +18,11 @@
   "autoload-dev": {
     "psr-4": { "Doitrous\\SeoRuntime\\Tests\\": "tests/" }
   },
+  "extra": {
+    "laravel": {
+      "providers": ["Doitrous\\SeoRuntime\\SeoRuntimeServiceProvider"],
+      "aliases": { "Seo": "Doitrous\\SeoRuntime\\Seo" }
+    }
+  },
   "minimum-stability": "stable"
 }
