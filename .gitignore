@@ -3,3 +3,5 @@ dist/
 *.tsbuildinfo
 .seo-runtime.json
 examples/*/vendor/
+.next/
+next-env.d.ts
