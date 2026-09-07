@@ -34,5 +34,8 @@ export function headTags(seo: ResolvedSeo): string {
  */
 export function injectHead(html: string, seo: ResolvedSeo): string {
   if (!/<\/head>/i.test(html)) return html
-  return html.replace(/<title>[\s\S]*?<\/title>/i, '').replace(/<\/head>/i, `${headTags(seo)}</head>`)
+  // A function replacer, not a string one: `String.replace` reads `$&`, `$1`, etc. out of a
+  // string replacement, so a hub title containing `$&` would otherwise be spliced into the
+  // matched `</head>` text instead of appearing literally.
+  return html.replace(/<title>[\s\S]*?<\/title>/i, '').replace(/<\/head>/i, () => `${headTags(seo)}</head>`)
 }

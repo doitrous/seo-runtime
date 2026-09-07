@@ -47,6 +47,12 @@ test('a document with no head is returned untouched', () => {
   assert.equal(injectHead('<p>x</p>', seo), '<p>x</p>')
 })
 
+test('a title containing $& is inserted literally, not read as a regex backreference', () => {
+  const out = injectHead('<html><head><meta charset="utf-8"></head><body>x</body></html>', { ...seo, title: 'A $& B' })
+  assert.match(out, /<title>A \$&amp; B<\/title>/)
+  assert.match(out, /<\/head><body>x/)
+})
+
 test('an existing title in the shell is replaced, not duplicated', () => {
   const out = injectHead('<html><head><title>Old</title></head><body></body></html>', seo)
   assert.doesNotMatch(out, /<title>Old<\/title>/)

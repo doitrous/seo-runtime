@@ -1,8 +1,8 @@
 import type { Request, RequestHandler, Response, Router } from 'express'
 import {
-  applySnapshot, bearerOf, DEFAULT_ARTICLE_PATH, DEFAULT_RESERVED, healthPayload, ingestArticles,
-  normalizePath, readConfig, redirectFor, resolveSeo, robotsTxt, sitemapEntries, sitemapXml,
-  startSync, timingSafeSecret,
+  absoluteUrl, applySnapshot, bearerOf, DEFAULT_ARTICLE_PATH, EMPTY_SETTINGS, healthPayload,
+  ingestArticles, normalizePath, readConfig, redirectFor, resolveSeo, robotsTxt, sitemapEntries,
+  sitemapXml, startSync, timingSafeSecret,
   type ArticlePath, type IngestOptions, type ResolvedSeo, type SeoStore,
 } from '@doitrous/seo-runtime-core'
 import { injectHead } from './inject.ts'
@@ -112,8 +112,11 @@ export function seoRuntime(opts: ExpressSeoOptions) {
     // 1. Redirects, ahead of everything else registered here.
     app.use(async (req, res, next) => {
       const snapshot = await opts.store.getSnapshot().catch(() => null)
-      const reserved = snapshot?.settings.reservedPrefixes ?? DEFAULT_RESERVED
-      const hit = await redirectFor(opts.store, req.originalUrl, reserved)
+      // No `?? DEFAULT_RESERVED` fallback here: redirectFor itself unions the default reserved
+      // prefixes into whatever is passed, so an explicit `reservedPrefixes: []` from the hub
+      // can never unreserve /api or /admin. Passing `undefined` on a cold store still falls
+      // through to redirectFor's own default parameter.
+      const hit = await redirectFor(opts.store, req.originalUrl, snapshot?.settings.reservedPrefixes)
       if (hit) { res.redirect(hit.status, hit.destination); return }
       next()
     })
@@ -148,11 +151,12 @@ export function seoRuntime(opts: ExpressSeoOptions) {
     app.post('/api/articles', auth, async (req, res) => {
       const read = await readBody(req, MAX_BODY_BYTES)
       if (!read) { tooLarge(res); return }
-      const settings = await opts.store.getSettings()
-      const origin = (Object.values(settings?.baseUrls ?? {})[0] ?? '').replace(/\/+$/, '')
+      const settings = (await opts.store.getSettings()) ?? EMPTY_SETTINGS
       const out = await ingestArticles(opts.store, read.body, {
         supported: opts.supported ?? ['en'],
-        urlFor: (lang, slug) => `${origin}${articlePath(lang, slug)}`,
+        // The language's own origin, not just the first configured one — absoluteUrl already
+        // carries that fallback for a language with no origin of its own.
+        urlFor: (lang, slug) => absoluteUrl(settings, lang, articlePath(lang, slug)),
         onArticle: opts.onArticle,
       })
       res.status(out.status).json(out.body)

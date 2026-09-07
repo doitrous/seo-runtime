@@ -1,6 +1,6 @@
 import {
-  applySnapshot, bearerOf, DEFAULT_ARTICLE_PATH, healthPayload, ingestArticles, readConfig,
-  resolveSeo, timingSafeSecret,
+  absoluteUrl, applySnapshot, bearerOf, DEFAULT_ARTICLE_PATH, EMPTY_SETTINGS, healthPayload,
+  ingestArticles, readConfig, resolveSeo, timingSafeSecret,
   type ArticlePath, type IngestOptions, type ResolvedSeo, type SeoStore,
 } from '@doitrous/seo-runtime-core'
 
@@ -96,12 +96,13 @@ export async function handleSeoPost(config: SeoConfig, req: Request, route: stri
 }
 
 export async function handleArticles(config: SeoConfig, body: unknown): Promise<Response> {
-  const settings = await config.store.getSettings()
-  const origin = (Object.values(settings?.baseUrls ?? {})[0] ?? '').replace(/\/+$/, '')
+  const settings = (await config.store.getSettings()) ?? EMPTY_SETTINGS
   const path = config.articlePath ?? DEFAULT_ARTICLE_PATH
   const out = await ingestArticles(config.store, body, {
     supported: config.supported ?? ['en'],
-    urlFor: (lang, slug) => `${origin}${path(lang, slug)}`,
+    // The language's own origin, not just the first configured one — absoluteUrl already
+    // carries that fallback for a language with no origin of its own.
+    urlFor: (lang, slug) => absoluteUrl(settings, lang, path(lang, slug)),
     onArticle: config.onArticle,
   })
   return json(out.body, out.status)

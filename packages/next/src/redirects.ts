@@ -1,7 +1,7 @@
 // `/edge`, not the package root: a proxy is bundled for the edge runtime, and the full barrel
 // re-exports the file and SQL stores (node:fs, node:sqlite, node:url) plus config.ts (node:crypto).
 // Importing those from a proxy is a build failure, so this module may never reach for them.
-import { redirectFor, DEFAULT_RESERVED, type SeoStore, type Settings } from '@doitrous/seo-runtime-core/edge'
+import { redirectFor, type SeoStore, type Settings } from '@doitrous/seo-runtime-core/edge'
 
 type Req = { url: string }
 type Continue = Response | undefined
@@ -22,8 +22,10 @@ export function withSeoRedirects(
 ) {
   return async (req: Req): Promise<Continue> => {
     const settings: Settings | null = await store.getSettings().catch(() => null)
-    const reserved = settings?.reservedPrefixes ?? DEFAULT_RESERVED
-    const hit = await redirectFor(store, req.url, reserved)
+    // No `?? DEFAULT_RESERVED` fallback: redirectFor itself unions the default reserved prefixes
+    // into whatever is passed, so `reservedPrefixes: []` from the hub can never unreserve /api or
+    // /admin, and `undefined` on a cold store still falls through to redirectFor's own default.
+    const hit = await redirectFor(store, req.url, settings?.reservedPrefixes)
     if (hit) {
       const location = hit.destination.startsWith('/') ? new URL(hit.destination, req.url).toString() : hit.destination
       return new Response(null, { status: hit.status, headers: { location } })

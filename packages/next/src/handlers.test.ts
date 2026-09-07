@@ -100,6 +100,22 @@ test('a site-specific articlePath moves the article URL everywhere', async () =>
   cleanup()
 })
 
+test('remoteUrl uses each language\'s own base URL, not just the first one', async () => {
+  const { seo, cleanup } = runtime()
+  const twoOrigins = { ...snapshot, settings: { ...snapshot.settings, baseUrls: { en: 'https://demo.test', ar: 'https://ar.demo.test' } } }
+  await seo.handlers.POST(post('/api/seo/sync', twoOrigins), ctx('sync'))
+  const res = await seo.articleHandler.POST(post('/api/articles', {
+    externalId: 9, articles: [
+      { lang: 'en', title: 'T', slug: 'hair', bodyMd: 'x' },
+      { lang: 'ar', title: 'T', slug: 'hair-ar', bodyMd: 'x' },
+    ],
+  }))
+  const body = await res.json() as { results: { lang: string; remoteUrl: string }[] }
+  assert.equal(body.results.find((r) => r.lang === 'en')!.remoteUrl, 'https://demo.test/en/blog/hair')
+  assert.equal(body.results.find((r) => r.lang === 'ar')!.remoteUrl, 'https://ar.demo.test/ar/blog/hair-ar')
+  cleanup()
+})
+
 test('health is authenticated, reports the version and counts, and does not drain', async () => {
   const { seo, store, cleanup } = runtime()
   await seo.handlers.POST(post('/api/seo/sync', snapshot), ctx('sync'))

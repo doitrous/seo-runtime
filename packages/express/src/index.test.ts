@@ -147,6 +147,22 @@ test('a site-specific articlePath moves the article URL everywhere', async (t) =
   assert.equal(body.results[0].remoteUrl, 'https://demo.test/en/articles/hair')
 })
 
+test('remoteUrl uses each language\'s own base URL, not just the first one', async (t) => {
+  const { url } = await boot(t)
+  const twoOrigins = { ...snapshot, settings: { ...snapshot.settings, baseUrls: { en: 'https://demo.test', ar: 'https://ar.demo.test' } } }
+  await fetch(`${url}/api/seo/sync`, { method: 'POST', headers: { ...authed, 'content-type': 'application/json' }, body: JSON.stringify(twoOrigins) })
+  const ingest = await fetch(`${url}/api/articles`, {
+    method: 'POST', headers: { ...authed, 'content-type': 'application/json' },
+    body: JSON.stringify({ externalId: 9, articles: [
+      { lang: 'en', title: 'T', slug: 'hair', bodyMd: 'x' },
+      { lang: 'ar', title: 'T', slug: 'hair-ar', bodyMd: 'x' },
+    ] }),
+  })
+  const body = await ingest.json() as { results: { lang: string; remoteUrl: string }[] }
+  assert.equal(body.results.find((r) => r.lang === 'en')!.remoteUrl, 'https://demo.test/en/blog/hair')
+  assert.equal(body.results.find((r) => r.lang === 'ar')!.remoteUrl, 'https://ar.demo.test/ar/blog/hair-ar')
+})
+
 test('health is authenticated, reports counts and does not drain', async (t) => {
   const { url, store } = await boot(t)
   await fetch(`${url}/api/seo/sync`, { method: 'POST', headers: { ...authed, 'content-type': 'application/json' }, body: JSON.stringify(snapshot) })
