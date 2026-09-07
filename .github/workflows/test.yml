@@ -38,7 +38,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
-        with: { php-version: '8.2' }
+        with: { php-version: '8.3' }
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
       # `working-directory` and a path-prefixed command do not compose: with both, the shell looks
       # for packages/laravel/packages/laravel/vendor/bin/phpunit. Set the directory once and use
       # plain relative paths inside it.
@@ -46,3 +48,20 @@ jobs:
         working-directory: packages/laravel
       - run: vendor/bin/phpunit --testdox
         working-directory: packages/laravel
+      # The demo requires packages/laravel via a path repository (composer.json's
+      # repositories.seo-runtime), so composer install here resolves straight to the package
+      # checked out above — no publish/tag step needed.
+      - run: composer install --no-interaction
+        working-directory: examples/laravel-demo
+      - name: conformance (laravel)
+        working-directory: examples/laravel-demo
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+          php artisan migrate --force
+          php artisan serve --port=8003 &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8003/up > /dev/null 2>&1 && break; sleep 1; done
+          node ../../packages/conformance/run.mjs --base http://127.0.0.1:8003 --secret demo-secret --slug demo
+      - name: stop demo
+        if: always()
+        run: pkill -f 'artisan serve' || true
