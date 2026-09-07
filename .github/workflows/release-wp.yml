@@ -1,0 +1,24 @@
+name: release-wp
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  zip:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the plugin zip
+        run: |
+          mkdir -p build/doitrous-seo
+          cp -r packages/wordpress/{doitrous-seo.php,includes,readme.txt} build/doitrous-seo/
+          cd build && zip -r ../doitrous-seo.zip doitrous-seo
+      - name: Create the release if it doesn't exist yet
+        run: gh release view "${{ github.ref_name }}" || gh release create "${{ github.ref_name }}" --title "${{ github.ref_name }}" --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Attach the plugin zip to the release
+        run: gh release upload "${{ github.ref_name }}" doitrous-seo.zip --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}

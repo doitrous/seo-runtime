@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "seo-hub runtime for Next.js app router: metadata, sitemap, robots, redirects, article pages.",
   "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/omary98/seo-runtime.git", "directory": "packages/next" },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "Stack-agnostic core of the seo-hub runtime: store, resolveSeo, redirects, sitemap, robots, article ingest, sync.",
   "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/omary98/seo-runtime.git", "directory": "packages/core-js" },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

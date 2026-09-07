@@ -1,0 +1,38 @@
+name: publish-npm
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    # Job level, NOT on the last step: attached to one step, the first two publishes run without a
+    # token and 401.
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22', registry-url: 'https://registry.npmjs.org' }
+      - name: Verify the tag matches every publishable package version
+        run: |
+          node -e "
+            const fs = require('fs');
+            const tag = (process.env.GITHUB_REF_NAME || '').replace(/^v/, '');
+            const pkgs = ['packages/core-js/package.json', 'packages/next/package.json', 'packages/express/package.json'];
+            const mismatched = pkgs.filter((p) => JSON.parse(fs.readFileSync(p, 'utf8')).version !== tag);
+            if (mismatched.length) {
+              console.error('Tag v' + tag + ' does not match the version field in: ' + mismatched.join(', '));
+              process.exit(1);
+            }
+            console.log('Tag v' + tag + ' matches every publishable package version.');
+          "
+      - run: npm ci
+      - run: npm run build      # -next and -express import core's dist; build before test
+      - run: npm test
+      # Order matters: -next and -express depend on the exact core version.
+      - run: npm publish -w @doitrous/seo-runtime-core --provenance
+      - run: npm publish -w @doitrous/seo-runtime-next --provenance
+      - run: npm publish -w @doitrous/seo-runtime-express --provenance
