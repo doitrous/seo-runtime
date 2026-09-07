@@ -104,8 +104,8 @@ Pages with `includeInSitemap && index` and a non-missing record, plus every stor
 language at `articlePath(lang, slug)`. `alternates` come from the page's `group`; `lastmod` from
 `updatedAt`; `priority` from the page SEO, falling back to `settings.pageDefaults[type].priority`
 and then to `0.5` — there is no per-type magic number; `changefreq` from
-`settings.pageDefaults[type].changefreq`. Above 5,000 URLs `/sitemap.xml` becomes a sitemap index
-pointing at `/sitemap-1.xml`, `/sitemap-2.xml`, …, and every stack mounts those numbered pages.
+`settings.pageDefaults[type].changefreq`. Phase 1 ships a single `/sitemap.xml`; `sitemapXml` throws when the URL set exceeds 5,000 entries
+rather than truncating silently. The sitemap index (`/sitemap-N.xml`) is deferred to phase 2.
 When `settings.indexingEnabled` is false the sitemap is empty.
 
 The articles the sitemap lists are the ones in the runtime's own store. A site that keeps its
