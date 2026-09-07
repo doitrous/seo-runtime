@@ -1,0 +1,14 @@
+{
+  "plugins": ["."],
+  "port": 8888,
+  "testsEnvironment": false,
+  "mappings": {
+    "wp-content/mu-plugins": "./bin/mu-plugins"
+  },
+  "config": {
+    "SEO_HUB_URL": "http://localhost:9999",
+    "SEO_HUB_SECRET": "demo-secret",
+    "SEO_SITE_SLUG": "demo",
+    "WP_DEBUG": true
+  }
+}
