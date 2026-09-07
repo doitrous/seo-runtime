@@ -2,13 +2,6 @@
 
 if (!defined('ABSPATH')) exit;
 
-/** True when the hub has a record for the URL being rendered. */
-function doitrous_seo_current_page(): ?array {
-    $path = doitrous_seo_normalize_path(parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/');
-
-    return doitrous_seo_get_page($path, doitrous_seo_site_lang());
-}
-
 /**
  * Yoast and Rank Math both print a title, a description, canonical, OG and Twitter tags on
  * wp_head. On a page the hub owns, theirs would duplicate ours — so their output is switched off
@@ -56,7 +49,7 @@ function doitrous_seo_head_tags(array $seo): string {
     $out .= $meta('twitter:image', $seo['twitter']['image']);
     foreach ($seo['jsonld'] as $entry) {
         // '<' -> the six-character escape, so a literal "</script>" inside a value cannot close
-        // the tag. str_replace('<', '\u003c', ...) is a no-op and ships an XSS hole.
+        // the tag. Replacing '<' with a plain '<' (what a collapsed escape looks like) is a no-op.
         $json = str_replace('<', '\u003c', wp_json_encode($entry, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
         $out .= '<script type="application/ld+json">' . $json . "</script>\n";
     }

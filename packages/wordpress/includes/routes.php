@@ -2,7 +2,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-/** The routes not shipped until B12b (redirects.php/sitemap.php/articles.php). */
+/** Anonymous routes; everything else needs the bearer secret. */
 const DOITROUS_SEO_PUBLIC_ROUTES = ['GET /sitemap.xml', 'GET /robots.txt'];
 
 function doitrous_seo_register_routes(): void {
@@ -24,18 +24,14 @@ function doitrous_seo_register_routes(): void {
         if (!in_array($key, DOITROUS_SEO_PUBLIC_ROUTES, true) && !doitrous_seo_authorized()) {
             doitrous_seo_json(['error' => 'unauthorized'], 401);
         }
-        // articles.php/sitemap.php ship in B12b; until then an authorized-but-unimplemented route
-        // falls through to WordPress's own routing (a 404) instead of a fatal call to a function
-        // that does not exist yet.
-        if (function_exists($routes[$key])) {
-            call_user_func($routes[$key]);
-        }
-
+        call_user_func($routes[$key]);
         return;
     }
-    // /sitemap-N.xml, the index pages (B12b).
-    if ($method === 'GET' && preg_match('#^/sitemap-(\d+)\.xml$#', $path, $m) && function_exists('doitrous_seo_route_sitemap')) {
-        doitrous_seo_route_sitemap((int) $m[1]);
+    // Anything else under /api/seo is authenticated before it is a 404, like the Next, Express
+    // and Laravel packages: the prefix never confirms which routes exist to an anonymous caller.
+    if (str_starts_with($path, '/api/seo/') || $path === '/api/seo') {
+        if (!doitrous_seo_authorized()) doitrous_seo_json(['error' => 'unauthorized'], 401);
+        doitrous_seo_json(['error' => 'not found'], 404);
     }
 }
 
