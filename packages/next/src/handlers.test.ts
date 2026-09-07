@@ -52,6 +52,14 @@ test('sync refuses a wrong secret before reading the body', async () => {
   cleanup()
 })
 
+test('a malformed snapshot is a 400, not a 500', async () => {
+  const { seo, cleanup } = runtime()
+  const res = await seo.handlers.POST(post('/api/seo/sync', { version: 'x', pages: 'nope' }), ctx('sync'))
+  assert.equal(res.status, 400)
+  assert.equal((await res.json()).status, 'invalid')
+  cleanup()
+})
+
 test('an older snapshot is answered stale', async () => {
   const { seo, cleanup } = runtime()
   await seo.handlers.POST(post('/api/seo/sync', { ...snapshot, version: 5 }), ctx('sync'))

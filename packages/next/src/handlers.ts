@@ -87,7 +87,10 @@ export async function handleSeoPost(config: SeoConfig, req: Request, route: stri
   if (!authorized(req)) return unauthorized()
   const read = await readJsonBody(req)
   if (!read) return json({ error: 'too large' }, 413)
-  if (route === 'sync') return json(await applySnapshot(config.store, read.body))
+  if (route === 'sync') {
+    const result = await applySnapshot(config.store, read.body)
+    return json(result, result.status === 'invalid' ? 400 : 200)   // CONTRACT: malformed snapshot is 400, never 500
+  }
   if (route === 'articles') return handleArticles(config, read.body)
   return json({ error: 'not found' }, 404)
 }
