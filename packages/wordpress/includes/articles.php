@@ -198,7 +198,7 @@ function doitrous_seo_to_rows(array $payload, array $supported): array {
             'imageUrl' => $payload['image']['url'] ?? null, 'imageAlt' => $payload['image']['alt'] ?? null,
             'authorName' => $payload['author']['name'] ?? null,
             'authorCredentials' => $payload['author']['credentials'] ?? null,
-            'references' => $a['references'] ?? [],
+            'references' => array_map(fn ($r) => ['title' => (string) ($r['title'] ?? ''), 'url' => (string) $r['url']], $a['references'] ?? []),   // {title,url} only, like core-js and Laravel
             'og' => ['title' => $a['og']['title'] ?? '', 'description' => $a['og']['description'] ?? '', 'image' => $payload['image']['url'] ?? ''],
             'extra' => array_filter([
                 'reviewer' => $payload['reviewer'] ?? null, 'reviewedAt' => $payload['reviewedAt'] ?? null,
