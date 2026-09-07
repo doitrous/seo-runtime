@@ -10,3 +10,7 @@ packages/laravel/.phpunit.result.cache
 next-env.d.ts
 examples/*/AGENTS.md
 examples/*/CLAUDE.md
+examples/laravel-demo/vendor/
+examples/laravel-demo/storage/**/*.sqlite
+examples/laravel-demo/database/*.sqlite
+.env

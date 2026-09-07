@@ -305,10 +305,16 @@ class Snapshot
      * The replacement MUST be the single-quoted literal '<' (six characters) — a double-quoted
      * "<" is a PHP Unicode escape and collapses back to a literal "<", which is a no-op and
      * reopens the XSS hole this function exists to close.
+     *
+     * JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE: JS's JSON.stringify never escapes '/'
+     * and emits non-ASCII characters as-is, never as \uXXXX. Without these flags PHP's
+     * json_encode diverges byte for byte -- a stray backslash-slash breaks an exact-string match
+     * against the JS output (the conformance suite's own JSON-LD escape test is one), and an
+     * Arabic title would come out unicode-escaped instead of literal.
      */
     public static function jsonLdBody(array $entry): string
     {
-        return str_replace('<', '\u003c', json_encode($entry));
+        return str_replace('<', '\u003c', json_encode($entry, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
     }
 
     public static function jsonLdScript(array $entries): string

@@ -10,7 +10,12 @@ class SeoController
 {
     public function sync(Request $request)
     {
-        $out = Seo::apply($request->json()->all());
+        // Decode the raw body directly rather than $request->json()->all(): a host app's global
+        // TrimStrings middleware (on by default in the Laravel skeleton) mutates that same bag,
+        // silently stripping leading/trailing whitespace from every string value it contains —
+        // corrupting a legitimate value like a brandSuffix of " | Demo" into "| Demo" before this
+        // controller ever sees it. getContent() returns the untouched raw body.
+        $out = Seo::apply(json_decode($request->getContent(), true));
 
         return response()->json($out, $out['status'] === 'invalid' ? 400 : 200);
     }

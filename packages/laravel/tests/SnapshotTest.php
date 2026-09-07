@@ -128,6 +128,21 @@ class SnapshotTest extends TestCase
         $this->assertSame(count($seo['jsonld']), substr_count($script, '</script>'));
     }
 
+    /**
+     * B11b conformance fix: json_encode() without JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE
+     * diverges from JS's JSON.stringify, which never escapes '/' and never \uXXXX-escapes
+     * non-ASCII text. A stray backslash-slash or a mangled Arabic title breaks byte-for-byte
+     * parity with the JS output — exactly what the conformance suite's rendered-page JSON-LD
+     * test checks.
+     */
+    public function test_json_ld_body_matches_javascripts_json_stringify_escaping(): void
+    {
+        $body = Snapshot::jsonLdBody(['@context' => 'https://schema.org', '@type' => 'Thing', 'name' => 'مقالة']);
+        $this->assertStringNotContainsString('\\/', $body);
+        $this->assertStringContainsString('https://schema.org', $body);
+        $this->assertStringContainsString('مقالة', $body);
+    }
+
     public function test_a_store_failure_never_breaks_resolve_but_is_counted(): void
     {
         $store = $this->store();
