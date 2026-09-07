@@ -15,7 +15,9 @@ export function isReserved(path: string, reserved: string[]): boolean {
 
 export function safeDestination(dest: string): string | null {
   const d = String(dest ?? '').trim()
-  if (!d || d.startsWith('//')) return null
+  // `//host` is scheme-relative and every browser also normalizes a leading `/\` the same way
+  // (`new URL('/\\evil.com', base)` resolves to `https://evil.com/`), so both are rejected here.
+  if (!d || /^\/[\/\\]/.test(d)) return null
   if (d.startsWith('/')) return d
   return /^https:\/\/\S+$/i.test(d) ? d : null
 }
@@ -35,7 +37,10 @@ export async function redirectFor(
 ): Promise<{ destination: string; status: number } | null> {
   try {
     const path = normalizePath(url.startsWith('http') ? new URL(url).pathname : url)
-    if (isReserved(path, reserved)) return null
+    // Unioned rather than defaulted: a caller passing `reservedPrefixes: []` from the hub's own
+    // settings must never be able to unreserve /api or /admin.
+    const effective = [...new Set([...DEFAULT_RESERVED, ...reserved])]
+    if (isReserved(path, effective)) return null
     const row = await store.getRedirect(path)
     if (!row || !row.active) return null
     const destination = safeDestination(row.destination)

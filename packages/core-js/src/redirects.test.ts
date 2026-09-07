@@ -45,6 +45,12 @@ test('destinations must be site-relative or https', () => {
   assert.equal(safeDestination(''), null)
 })
 
+// `new URL('/\\evil.com', 'https://site.test/a')` resolves to `https://evil.com/` — every
+// browser normalizes a leading `/\` exactly like `//`, so it must be rejected the same way.
+test('a backslash right after the leading slash is rejected like a scheme-relative URL', () => {
+  assert.equal(safeDestination('/\\evil.com'), null)
+})
+
 test('redirectFor reads the store, counts the hit and returns destination plus status', async () => {
   const hits: string[] = []
   const store = {
@@ -73,4 +79,13 @@ test('redirectFor drops an unsafe destination rather than emitting it', async ()
 test('a store failure never breaks the request', async () => {
   const store = { getRedirect: async () => { throw new Error('down') }, incrementHit: async () => {} } as never
   assert.equal(await redirectFor(store, 'https://x.com/a'), null)
+})
+
+test('an empty configured reservedPrefixes cannot unreserve /api or /admin', async () => {
+  const rows: StoredRedirect[] = [{ source: '/api/seo/sync', destination: '/elsewhere', type: 301, active: true }]
+  const store = {
+    getRedirect: async (p: string) => rows.find((r) => r.source === p) ?? null,
+    incrementHit: async () => {},
+  } as never
+  assert.equal(await redirectFor(store, 'https://x.com/api/seo/sync', []), null)
 })

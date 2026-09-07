@@ -72,7 +72,7 @@ export function toStoredArticles(payload: HubPayload, supported: string[]): { sk
     const og: Meta = { title: a.og?.title ?? '', description: a.og?.description ?? '', image: payload.image?.url ?? '' }
     const lede = a.introduction?.trim() || intro(a.bodyMd)
     out.push({
-      externalId: payload.externalId, lang: a.lang, slug: a.slug, title: a.title,
+      externalId: payload.externalId, lang: a.lang, slug: a.slug.trim(), title: a.title,
       metaTitle: a.metaTitle?.trim() || a.title,
       metaDescription: a.metaDescription?.trim() || clip(lede, 155),
       bodyMd: a.bodyMd, bodyHtml: renderBody(a.bodyMd),

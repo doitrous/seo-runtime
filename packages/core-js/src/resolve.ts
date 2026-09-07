@@ -58,14 +58,14 @@ export function composeSeo(
   if (defaultLang) alternates['x-default'] = alternates[defaultLang]
 
   const og = {
-    title: seo?.og.title || title,
-    description: seo?.og.description || description,
-    image: seo?.og.image || s.defaultOgImage || '',
+    title: seo?.og?.title || title,
+    description: seo?.og?.description || description,
+    image: seo?.og?.image || s.defaultOgImage || '',
   }
   const twitter = {
-    title: seo?.twitter.title || og.title,
-    description: seo?.twitter.description || og.description,
-    image: seo?.twitter.image || og.image,
+    title: seo?.twitter?.title || og.title,
+    description: seo?.twitter?.description || og.description,
+    image: seo?.twitter?.image || og.image,
   }
 
   const override = (seo?.structuredData ?? []).filter(isSchemaOrg)

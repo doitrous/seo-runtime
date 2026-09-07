@@ -157,6 +157,18 @@ test('resolveSeo swallows a store failure and counts it', async () => {
   assert.equal(storeFailures(), before + 1)
 })
 
+test('a page whose seo has no og/twitter still composes a title and canonical', () => {
+  const bare = { ...page.seo } as Partial<typeof page.seo>
+  delete bare.og
+  delete bare.twitter
+  const r = composeSeo({ ...page, seo: bare as typeof page.seo }, settings, page.path, 'en')
+  assert.equal(r.title, 'Dr Anna Fahmy | X')
+  assert.equal(r.canonical, 'https://x.com/en/doctors/anna')
+  assert.equal(r.og.title, 'Dr Anna Fahmy | X')
+  assert.equal(r.og.image, 'https://x.com/og.png')
+  assert.equal(r.twitter.title, 'Dr Anna Fahmy | X')
+})
+
 test('a page title containing $& is inserted literally into the title template', () => {
   const r = composeSeo({ ...page, title: 'Anna $& Fahmy', seo: { ...page.seo, seoTitle: '' } }, settings, page.path, 'en')
   assert.equal(r.title, 'Anna $& Fahmy, dermatologist | X')

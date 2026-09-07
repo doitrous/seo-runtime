@@ -71,6 +71,22 @@ test('article priority falls back to the type default, not a magic number', () =
   assert.equal(sitemapEntries(s, [article()])[0].priority, 0.7)
 })
 
+test('a page with no priority falls back to the type default, then 0.5', () => {
+  const noPriority = page({ seo: { ...seo, priority: undefined as unknown as number } })
+  const [e] = sitemapEntries(snap({ pages: [noPriority] }), [])
+  assert.equal(e.priority, 0.8)   // the doctor type default configured in snap()
+  const untyped = page({ type: 'other', seo: { ...seo, priority: undefined as unknown as number } })
+  const [u] = sitemapEntries(snap({ pages: [untyped] }), [])
+  assert.equal(u.priority, 0.5)
+})
+
+test('an unparsable updatedAt omits lastmod instead of throwing', () => {
+  const [e] = sitemapEntries(snap({ pages: [page({ updatedAt: 'not-a-date' })] }), [])
+  assert.equal(e.lastmod, undefined)
+  assert.doesNotThrow(() => sitemapXml([e]))
+  assert.doesNotMatch(sitemapXml([e]), /<lastmod>/)
+})
+
 test('the kill switch empties the sitemap', () => {
   const s = snap()
   s.settings.indexingEnabled = false

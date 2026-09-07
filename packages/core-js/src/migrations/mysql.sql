@@ -17,12 +17,14 @@ CREATE TABLE IF NOT EXISTS seo_runtime_pages (
   KEY seo_runtime_pages_group (group_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 CREATE TABLE IF NOT EXISTS seo_runtime_redirects (
-  source VARCHAR(191) PRIMARY KEY, destination VARCHAR(191) NOT NULL,
+  source VARCHAR(191) PRIMARY KEY, destination VARCHAR(1000) NOT NULL,
   type INTEGER NOT NULL DEFAULT 301, active TINYINT(1) NOT NULL DEFAULT 1, hits INTEGER NOT NULL DEFAULT 0
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 CREATE TABLE IF NOT EXISTS seo_runtime_articles (
   external_id INTEGER NOT NULL, lang VARCHAR(191) NOT NULL, slug VARCHAR(191) NOT NULL,
-  title VARCHAR(191) NOT NULL, meta_title VARCHAR(191) NOT NULL DEFAULT '', meta_description VARCHAR(191) NOT NULL DEFAULT '',
+  -- Matches validatePayload's 500-char title ceiling and the Laravel/WordPress column widths;
+  -- a valid hub payload must not become a MySQL strict-mode insert error on this stack alone.
+  title VARCHAR(500) NOT NULL, meta_title VARCHAR(500) NOT NULL DEFAULT '', meta_description VARCHAR(1000) NOT NULL DEFAULT '',
   body_md MEDIUMTEXT, body_html MEDIUMTEXT,
   faq JSON NOT NULL, schema_jsonld JSON NOT NULL,
   image_url VARCHAR(191), image_alt VARCHAR(191), author_name VARCHAR(191), author_credentials VARCHAR(191),

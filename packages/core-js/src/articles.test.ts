@@ -73,6 +73,13 @@ test('the stored article carries rendered HTML, a derived meta description and t
   assert.equal(a.og.title, 'OG')
 })
 
+test('a slug with surrounding whitespace is trimmed before it is stored', () => {
+  const p = payload()
+  p.articles[0].slug = ' hair-transplant-egypt '
+  const [a] = toStoredArticles(p, ['en']).articles
+  assert.equal(a.slug, 'hair-transplant-egypt')
+})
+
 test('with no introduction the meta description falls back to the first paragraph', () => {
   const p = payload()
   p.articles[0].metaDescription = ''

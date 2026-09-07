@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { applySnapshot, sanitizeSnapshot } from './sync.ts'
+import { applySnapshot, HEALTH_INTERVAL_MS, PULL_INTERVAL_MS, sanitizeSnapshot, startSync } from './sync.ts'
 import { healthPayload, MAX_REDIRECT_HITS } from './health.ts'
 import { EMPTY_META, EMPTY_SETTINGS, type Snapshot } from './types.ts'
 import { JsonFileStore } from './stores/json-file.ts'
@@ -59,6 +59,43 @@ test('a snapshot addressed to another site is refused', async () => {
   assert.equal((await applySnapshot(store, snap({ version: 9, siteSlug: 'other' }))).status, 'invalid')
   assert.equal((await store.getSnapshot())!.siteSlug, 'x')
   cleanup()
+})
+
+test('a cold store refuses a snapshot for another site when a slug is configured', async () => {
+  const { store, cleanup } = tmpStore()
+  const cfg = { hubUrl: '', secret: '', slug: 'x' }
+  const out = await applySnapshot(store, snap({ siteSlug: 'other' }), cfg)
+  assert.equal(out.status, 'invalid')
+  assert.equal(await store.getSnapshot(), null)
+  // The matching slug still applies normally.
+  assert.equal((await applySnapshot(store, snap({ siteSlug: 'x' }), cfg)).status, 'applied')
+  cleanup()
+})
+
+test('startSync schedules a pull timer and a separate hourly health timer, and stop clears both', () => {
+  const originalSet = global.setInterval
+  const originalClear = global.clearInterval
+  const scheduled: number[] = []
+  const cleared: unknown[] = []
+  // A stub rather than node:test's mock timers: this only needs to see what intervals were
+  // requested and that stopping the returned function tears both of them down.
+  global.setInterval = ((_fn: (...a: unknown[]) => void, ms?: number) => {
+    scheduled.push(ms ?? -1)
+    return { ref() { return this }, unref() { return this } } as unknown as NodeJS.Timeout
+  }) as typeof setInterval
+  global.clearInterval = ((t: unknown) => { cleared.push(t) }) as typeof clearInterval
+  try {
+    const store = { getSnapshot: async () => null } as never
+    const stop = startSync(store, { version: '0.1.0' })
+    assert.equal(scheduled.length, 2)
+    assert.ok(scheduled.includes(PULL_INTERVAL_MS))
+    assert.ok(scheduled.includes(HEALTH_INTERVAL_MS))
+    stop()
+    assert.equal(cleared.length, 2)
+  } finally {
+    global.setInterval = originalSet
+    global.clearInterval = originalClear
+  }
 })
 
 test('unsafe redirect destinations are dropped at sync time', () => {

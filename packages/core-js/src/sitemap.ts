@@ -21,7 +21,12 @@ export function xmlEscape(s: string): string {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c] as string))
 }
 
-const day = (iso: string) => (iso ? new Date(iso).toISOString().slice(0, 10) : undefined)
+/** Omits `lastmod` for an unparsable date rather than throwing `RangeError` out of the route. */
+const day = (iso: string) => {
+  if (!iso) return undefined
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? undefined : d.toISOString().slice(0, 10)
+}
 
 function withDefault(alternates: Record<string, string>): Record<string, string> {
   const lang = alternates.en ? 'en' : Object.keys(alternates)[0]
@@ -51,10 +56,11 @@ export function sitemapEntries(
     const group = p.group ? (byGroup.get(p.group) ?? [p]) : [p]
     const alternates: Record<string, string> = {}
     for (const g of group) alternates[g.lang] = absoluteUrl(s, g.lang, g.path)
+    const typeDefaults = s.pageDefaults[p.type] ?? DEFAULT_PAGE_DEFAULTS
     out.push({
       loc: absoluteUrl(s, p.lang, p.path), lastmod: day(p.updatedAt),
-      changefreq: (s.pageDefaults[p.type] ?? DEFAULT_PAGE_DEFAULTS).changefreq,
-      priority: p.seo.priority,
+      changefreq: typeDefaults.changefreq,
+      priority: p.seo.priority ?? typeDefaults.priority ?? 0.5,
       alternates: withDefault(alternates),
     })
   }

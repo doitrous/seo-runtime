@@ -33,11 +33,19 @@ function isSnapshot(body: unknown): body is Snapshot {
  * Applies a pushed or pulled snapshot. A version below the stored one is ignored, and a snapshot
  * addressed to a different site is refused outright — a runtime must never render another site's
  * pages because a slug was mistyped in the hub.
+ *
+ * On a cold store (nothing synced yet) there is no stored `siteSlug` to check against, so the
+ * configured `SEO_SITE_SLUG` stands in for it when one is set: the boot state is exactly when a
+ * mistyped slug in the hub would otherwise seed the wrong site's pages with no prior snapshot to
+ * catch it.
  */
-export async function applySnapshot(store: SeoStore, incoming: unknown): Promise<{ status: 'applied' | 'stale' | 'invalid'; version: number }> {
+export async function applySnapshot(
+  store: SeoStore, incoming: unknown, cfg = readConfig(),
+): Promise<{ status: 'applied' | 'stale' | 'invalid'; version: number }> {
   if (!isSnapshot(incoming)) return { status: 'invalid', version: 0 }
   const current = await store.getSnapshot()
-  if (current && current.siteSlug && incoming.siteSlug !== current.siteSlug) return { status: 'invalid', version: current.version }
+  const expectedSlug = current?.siteSlug || cfg.slug
+  if (expectedSlug && incoming.siteSlug !== expectedSlug) return { status: 'invalid', version: current?.version ?? 0 }
   if (current && incoming.version < current.version) return { status: 'stale', version: current.version }
   await store.putSnapshot(sanitizeSnapshot(incoming))
   return { status: 'applied', version: incoming.version }
@@ -60,16 +68,23 @@ export async function pullSnapshot(store: SeoStore, cfg = readConfig()): Promise
 }
 
 export const PULL_INTERVAL_MS = 6 * 60 * 60_000
+/** The contract's health cadence — hourly, not the 6 h snapshot-pull cadence. */
+export const HEALTH_INTERVAL_MS = 60 * 60_000
 
 /**
- * Boot-time wiring: pulls the snapshot and pings health once immediately, then again on every
- * tick of a single interval (default 6 h — the contract's sync cadence). Timers are unref'd so
- * they never hold the process open. Returns a stop function.
+ * Boot-time wiring: pulls the snapshot and pings health once immediately, then the two run on
+ * their own cadence from then on — the pull every `intervalMs` (default 6 h) and health every
+ * `healthIntervalMs` (default hourly, matching the Laravel and WordPress ports). Both timers are
+ * unref'd so neither holds the process open. Returns a stop function that clears both.
  */
-export function startSync(store: SeoStore, opts: { version: string; intervalMs?: number }): () => void {
-  const tick = () => { void pullSnapshot(store); void sendHealth(store, opts.version) }
-  tick()
-  const timer = setInterval(tick, opts.intervalMs ?? PULL_INTERVAL_MS)
-  timer.unref?.()
-  return () => clearInterval(timer)
+export function startSync(
+  store: SeoStore, opts: { version: string; intervalMs?: number; healthIntervalMs?: number },
+): () => void {
+  void pullSnapshot(store)
+  void sendHealth(store, opts.version)
+  const pullTimer = setInterval(() => void pullSnapshot(store), opts.intervalMs ?? PULL_INTERVAL_MS)
+  pullTimer.unref?.()
+  const healthTimer = setInterval(() => void sendHealth(store, opts.version), opts.healthIntervalMs ?? HEALTH_INTERVAL_MS)
+  healthTimer.unref?.()
+  return () => { clearInterval(pullTimer); clearInterval(healthTimer) }
 }
