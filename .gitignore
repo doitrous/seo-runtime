@@ -5,3 +5,5 @@ dist/
 examples/*/vendor/
 .next/
 next-env.d.ts
+examples/*/AGENTS.md
+examples/*/CLAUDE.md
