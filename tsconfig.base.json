@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023", "DOM"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "declaration": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+
+    // Load-bearing pair. Every source file in this repo imports its siblings with the real
+    // extension (`import type { Snapshot } from './types.ts'`) so `node --experimental-strip-types`
+    // can run the sources directly and `node --test src/*.test.ts` needs no build step.
+    // `allowImportingTsExtensions` is what lets tsc accept those specifiers at all, and
+    // `rewriteRelativeImportExtensions` (TS 5.7+) is what rewrites them to `.js` in the emitted
+    // dist. Without BOTH, `npm run build` and `npm run typecheck` fail on the first import of
+    // every package. `typescript: ^5.7.0` in the root devDependencies is therefore a floor,
+    // not a preference.
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true
+  }
+}

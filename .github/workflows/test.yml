@@ -1,0 +1,27 @@
+name: test
+on:
+  push: { branches: [main] }
+  pull_request:
+jobs:
+  js:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+  php:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with: { php-version: '8.2' }
+      # `working-directory` and a path-prefixed command do not compose: with both, the shell looks
+      # for packages/laravel/packages/laravel/vendor/bin/phpunit. Set the directory once and use
+      # plain relative paths inside it.
+      - run: composer install --no-interaction
+        working-directory: packages/laravel
+      - run: vendor/bin/phpunit --testdox
+        working-directory: packages/laravel

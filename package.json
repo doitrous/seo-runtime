@@ -1,0 +1,12 @@
+{
+  "name": "seo-runtime",
+  "private": true,
+  "type": "module",
+  "workspaces": ["packages/core-js", "packages/next", "packages/express", "packages/conformance", "examples/*"],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present"
+  },
+  "devDependencies": { "typescript": "^5.7.0" }
+}
