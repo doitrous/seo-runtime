@@ -10,9 +10,9 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '22' }
       - run: npm ci
+      - run: npm run build      # -next and -express import core's dist; build before typecheck/test
       - run: npm run typecheck
       - run: npm test
-      - run: npm run build
       # The conformance suite (packages/conformance) is the executable form of packages/CONTRACT.md
       # and must pass against every runtime's demo app. Each step waits for the demo's port with a
       # short curl poll rather than a fixed sleep, then runs the identical suite against it — the
@@ -38,7 +38,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
-        with: { php-version: '8.3' }
+        with: { php-version: '8.4' }
       - uses: actions/setup-node@v4
         with: { node-version: '22' }
       # `working-directory` and a path-prefixed command do not compose: with both, the shell looks
