@@ -1,0 +1,20 @@
+{
+  "name": "@doitrous/seo-runtime-express",
+  "version": "0.1.0",
+  "description": "seo-hub runtime for Express: routes, redirects, res.locals.seo, injectHead for SPA shells.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": "./dist/index.js", "./package.json": "./package.json" },
+  "files": ["dist"],
+  "publishConfig": { "access": "public" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test --experimental-strip-types --disable-warning=ExperimentalWarning src/*.test.ts"
+  },
+  "dependencies": { "@doitrous/seo-runtime-core": "0.1.0" },
+  "peerDependencies": { "express": ">=4" },
+  "devDependencies": { "@types/express": "^5.0.6", "express": "^5.2.1" }
+}
