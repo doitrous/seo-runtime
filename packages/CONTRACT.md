@@ -80,7 +80,10 @@ with it. When `settings.indexingEnabled` is false, `robots.index` is false for e
 Bearer secrets are compared timing-safe. Request bodies over 2 MB are refused with 413, and the
 limit is enforced **on the stream**: `content-length` is absent on a chunked request, so every
 stack reads the body through a counting reader and aborts the moment the byte count passes the
-limit. Checking `content-length` alone is not conformant.
+limit. Checking `content-length` alone is not conformant. The one exception is Laravel: PHP's SAPI
+has already buffered the entire request body before any application code runs, so `SeoBodyLimit`
+answers 413 off the fully buffered body rather than an in-flight byte count — the streaming abort
+described above applies to the Node stacks only.
 
 Redirect hit counters are drained **only after the hub answers 2xx** to the health ping. A ping
 that fails to reach the hub loses no hits.
@@ -94,7 +97,9 @@ Exact path match after normalization (leading slash, no trailing slash, no query
 Types 301, 302, 307 and 308. Inactive rows never match. A hit increments a local counter that the
 next health ping reports as a delta and then resets. Redirects are applied before any auth or
 session middleware, and are skipped for `/api`, `/admin` and every prefix in
-`settings.reservedPrefixes`.
+`settings.reservedPrefixes`. `/api` and `/admin` are reserved unconditionally: every stack unions
+them into whatever `settings.reservedPrefixes` sends, so a hub-configured empty list can never
+unreserve them.
 
 Destinations must be site-relative (`/path`) or `https://…`; anything else is dropped at sync time.
 
