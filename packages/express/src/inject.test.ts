@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { headTags, injectHead } from './inject.ts'
-import type { ResolvedSeo } from '@doitrous/seo-runtime-core'
+import type { ResolvedSeo } from '@omary98/seo-runtime-core'
 
 const seo: ResolvedSeo = {
   title: 'A & B', description: 'Say "hi".', canonical: 'https://x.com/en/a',

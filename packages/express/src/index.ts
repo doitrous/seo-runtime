@@ -4,7 +4,7 @@ import {
   ingestArticles, normalizePath, readConfig, redirectFor, resolveSeo, robotsTxt, sitemapEntries,
   sitemapXml, startSync, timingSafeSecret,
   type ArticlePath, type IngestOptions, type ResolvedSeo, type SeoStore,
-} from '@doitrous/seo-runtime-core'
+} from '@omary98/seo-runtime-core'
 import { injectHead } from './inject.ts'
 
 export { headTags, injectHead } from './inject.ts'

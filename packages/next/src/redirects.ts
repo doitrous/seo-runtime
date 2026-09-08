@@ -1,7 +1,7 @@
 // `/edge`, not the package root: a proxy is bundled for the edge runtime, and the full barrel
 // re-exports the file and SQL stores (node:fs, node:sqlite, node:url) plus config.ts (node:crypto).
 // Importing those from a proxy is a build failure, so this module may never reach for them.
-import { redirectFor, type SeoStore, type Settings } from '@doitrous/seo-runtime-core/edge'
+import { redirectFor, type SeoStore, type Settings } from '@omary98/seo-runtime-core/edge'
 
 type Req = { url: string }
 type Continue = Response | undefined

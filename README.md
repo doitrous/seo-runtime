@@ -7,9 +7,9 @@ behaviour every package implements and `packages/conformance/` for the suite tha
 
 | Package | Stack | Install |
 |---|---|---|
-| `@doitrous/seo-runtime-core` | any JS | `npm i @doitrous/seo-runtime-core` |
-| `@doitrous/seo-runtime-next` | Next.js 14+ app router | `npm i @doitrous/seo-runtime-next` |
-| `@doitrous/seo-runtime-express` | Express 4/5 | `npm i @doitrous/seo-runtime-express` |
+| `@omary98/seo-runtime-core` | any JS | `npm i @omary98/seo-runtime-core` |
+| `@omary98/seo-runtime-next` | Next.js 14+ app router | `npm i @omary98/seo-runtime-next` |
+| `@omary98/seo-runtime-express` | Express 4/5 | `npm i @omary98/seo-runtime-express` |
 | `doitrous/seo-runtime-laravel` | Laravel 10+ | composer, VCS repository (below) |
 | `doitrous-seo` | WordPress 6+ | plugin zip from the GitHub releases |
 
@@ -32,13 +32,13 @@ code-level option passed at setup, never an environment variable.
 ## Install: Next.js (app router)
 
 ```
-npm i @doitrous/seo-runtime-next
+npm i @omary98/seo-runtime-next
 ```
 
 Call `createSeo({ store, pages, supported, articlePath })` once and wire its pieces into the app
 router's conventions (`generateMetadata`, `app/sitemap.ts`, `app/robots.ts`) — see
 `examples/next-demo`. Redirects run from a `proxy.ts` at the project root built on
-`withSeoRedirects`, imported from `@doitrous/seo-runtime-next/edge` — never from the package root,
+`withSeoRedirects`, imported from `@omary98/seo-runtime-next/edge` — never from the package root,
 which pulls Node-only modules into the proxy bundle and fails the build.
 
 Next's own router issues a 308 that strips a trailing slash *before* `proxy.ts` ever runs, which
@@ -52,7 +52,7 @@ const nextConfig: NextConfig = { skipTrailingSlashRedirect: true }
 ## Install: Express
 
 ```
-npm i @doitrous/seo-runtime-express
+npm i @omary98/seo-runtime-express
 ```
 
 ```js
@@ -111,7 +111,7 @@ the site has a snapshot before the first scheduled tick.
 
 1. Bump the version in `packages/core-js`, `packages/next`, `packages/express`,
    `packages/laravel/composer.json` and `packages/wordpress/doitrous-seo.php` — one version
-   number across all five, and the same number in the `@doitrous/seo-runtime-core` dependency of
+   number across all five, and the same number in the `@omary98/seo-runtime-core` dependency of
    `-next` and `-express`.
 2. `git tag vX.Y.Z && git push --tags`. The `publish-npm` workflow tests, builds and publishes the
    three npm packages in dependency order (core, then next, then express), and refuses to publish
@@ -122,6 +122,6 @@ the site has a snapshot before the first scheduled tick.
    tag as soon as they `composer update`.
 
 One-time setup: add an `NPM_TOKEN` repository secret (an npm automation token with publish rights)
-before the first tag, and make sure the `@doitrous` scope exists on npm — `publishConfig.access:
-public` in each `package.json` only makes a *first* publish under that scope public rather than a
-paid private package; it doesn't create the scope itself.
+before the first tag. The packages publish under `@omary98`, the scope every npm account owns
+automatically for its own username, so no organization is needed — `publishConfig.access: public`
+in each `package.json` makes the first publish public rather than a paid private package.

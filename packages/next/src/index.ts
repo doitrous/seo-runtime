@@ -2,7 +2,7 @@ import type { Metadata, MetadataRoute } from 'next'
 import {
   DEFAULT_ARTICLE_PATH, jsonLdScript, resolveSeo, robotsTxt, sitemapEntries, sitemapXml,
   startSync, type ResolvedSeo,
-} from '@doitrous/seo-runtime-core'
+} from '@omary98/seo-runtime-core'
 import { handleSeoGet, handleSeoPost, MAX_BODY_BYTES, type SeoConfig } from './handlers.ts'
 
 export type { SeoConfig, ProviderPage } from './handlers.ts'

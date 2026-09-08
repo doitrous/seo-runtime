@@ -1,4 +1,4 @@
-import { SeoJsonLd } from '@doitrous/seo-runtime-next'
+import { SeoJsonLd } from '@omary98/seo-runtime-next'
 import { seo } from '@/lib/seo'
 
 export async function generateMetadata({ params }: { params: Promise<{ lang: string }> }) {

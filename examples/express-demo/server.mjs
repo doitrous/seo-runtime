@@ -1,10 +1,10 @@
 import express from 'express'
-import { JsonFileStore } from '@doitrous/seo-runtime-core'
-import { seoRuntime } from '@doitrous/seo-runtime-express'
+import { JsonFileStore } from '@omary98/seo-runtime-core'
+import { seoRuntime } from '@omary98/seo-runtime-express'
 
 const app = express()
 
-// No express.json() mounted here: @doitrous/seo-runtime-express reads its own request bodies
+// No express.json() mounted here: @omary98/seo-runtime-express reads its own request bodies
 // (with the 2 MB ceiling enforced on the stream) for POST /api/seo/sync and POST /api/articles,
 // so it works whether or not this app runs its own body parser.
 seoRuntime({

@@ -5,7 +5,7 @@ import express from 'express'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { JsonFileStore, EMPTY_SETTINGS, type Snapshot } from '@doitrous/seo-runtime-core'
+import { JsonFileStore, EMPTY_SETTINGS, type Snapshot } from '@omary98/seo-runtime-core'
 import { seoRuntime, type ExpressSeoOptions } from './index.ts'
 
 process.env.SEO_HUB_SECRET = 's3cret'

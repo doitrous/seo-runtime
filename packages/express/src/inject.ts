@@ -1,4 +1,4 @@
-import { escapeHtml, jsonLdScript, type ResolvedSeo } from '@doitrous/seo-runtime-core'
+import { escapeHtml, jsonLdScript, type ResolvedSeo } from '@omary98/seo-runtime-core'
 
 /**
  * Every attribute and text node is escaped with core's `escapeHtml`; JSON-LD is serialized with

@@ -1,6 +1,6 @@
 import { createElement, Fragment, type ReactElement } from 'react'
-import type { ResolvedSeo } from '@doitrous/seo-runtime-core'
-import { jsonLdBody } from '@doitrous/seo-runtime-core'
+import type { ResolvedSeo } from '@omary98/seo-runtime-core'
+import { jsonLdBody } from '@omary98/seo-runtime-core'
 
 /**
  * Plain `.ts`, not `.tsx`: `node --test --experimental-strip-types` cannot load a `.tsx` file, and

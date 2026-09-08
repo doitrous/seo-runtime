@@ -1,4 +1,4 @@
-import { createSeo } from '@doitrous/seo-runtime-next'
+import { createSeo } from '@omary98/seo-runtime-next'
 import { store } from './store'
 
 export const seo = createSeo({

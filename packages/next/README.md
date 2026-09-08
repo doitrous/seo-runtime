@@ -1,15 +1,15 @@
-# @doitrous/seo-runtime-next
+# @omary98/seo-runtime-next
 
 seo-hub runtime for the Next.js App Router: metadata, sitemap, robots, redirects, article ingest.
 
 ## Install
 
-    npm install @doitrous/seo-runtime-next @doitrous/seo-runtime-core
+    npm install @omary98/seo-runtime-next @omary98/seo-runtime-core
 
 ## `createSeo`
 
     // lib/seo.ts
-    import { createSeo } from '@doitrous/seo-runtime-next'
+    import { createSeo } from '@omary98/seo-runtime-next'
     import { store } from './store'
 
     export const seo = createSeo({
@@ -27,7 +27,7 @@ Next 16's proxy convention (formerly `middleware.ts`) needs the `/edge` export o
 root pulls in the full core barrel (node:fs/node:sqlite/node:crypto stores), which fails the build:
 
     // proxy.ts
-    import { withSeoRedirects } from '@doitrous/seo-runtime-next/edge'
+    import { withSeoRedirects } from '@omary98/seo-runtime-next/edge'
     import { store } from './lib/store'
 
     export default async function proxy(request) {

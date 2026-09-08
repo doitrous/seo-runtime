@@ -1,5 +1,5 @@
 {
-  "name": "@doitrous/seo-runtime-next",
+  "name": "@omary98/seo-runtime-next",
   "version": "0.1.0",
   "description": "seo-hub runtime for Next.js app router: metadata, sitemap, robots, redirects, article pages.",
   "license": "MIT",
@@ -15,7 +15,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --test --experimental-strip-types --disable-warning=ExperimentalWarning src/*.test.ts"
   },
-  "dependencies": { "@doitrous/seo-runtime-core": "0.1.0" },
+  "dependencies": { "@omary98/seo-runtime-core": "0.1.0" },
   "peerDependencies": { "next": ">=16", "react": ">=18" },
   "devDependencies": { "@types/react": "^19.0.0", "react": "^19.0.0" }
 }

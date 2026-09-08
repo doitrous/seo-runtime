@@ -2,7 +2,7 @@ import {
   absoluteUrl, applySnapshot, bearerOf, DEFAULT_ARTICLE_PATH, EMPTY_SETTINGS, healthPayload,
   ingestArticles, readConfig, resolveSeo, timingSafeSecret,
   type ArticlePath, type IngestOptions, type ResolvedSeo, type SeoStore,
-} from '@doitrous/seo-runtime-core'
+} from '@omary98/seo-runtime-core'
 
 export const MAX_BODY_BYTES = 2 * 1024 * 1024
 

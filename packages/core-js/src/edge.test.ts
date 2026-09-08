@@ -13,7 +13,7 @@ function localImports(file: string): string[] {
 }
 
 /**
- * A Next proxy runs in a bundle that has no Node built-ins. `@doitrous/seo-runtime-core/edge` is
+ * A Next proxy runs in a bundle that has no Node built-ins. `@omary98/seo-runtime-core/edge` is
  * what it imports, so every module reachable from that barrel — transitively, not just the ones
  * it re-exports directly — has to be free of them.
  */

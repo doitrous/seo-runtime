@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { JsonFileStore, type Snapshot, EMPTY_SETTINGS } from '@doitrous/seo-runtime-core'
+import { JsonFileStore, type Snapshot, EMPTY_SETTINGS } from '@omary98/seo-runtime-core'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
