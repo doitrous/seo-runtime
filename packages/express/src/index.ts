@@ -97,7 +97,7 @@ async function articlePages(store: SeoStore, articlePath: ArticlePath): Promise<
  * mounting those.
  */
 export function seoRuntime(opts: ExpressSeoOptions) {
-  const version = opts.version ?? '0.1.0'
+  const version = opts.version ?? '0.1.1'
   const articlePath = opts.articlePath ?? DEFAULT_ARTICLE_PATH
 
   const auth: RequestHandler = (req, res, next) => {

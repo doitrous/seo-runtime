@@ -13,7 +13,7 @@ seo-hub runtime for the Next.js App Router: metadata, sitemap, robots, redirects
     import { store } from './store'
 
     export const seo = createSeo({
-      store, supported: ['en', 'ar'], version: '0.1.0',
+      store, supported: ['en', 'ar'], version: '0.1.1',
       pages: async () => [{ key: 'home', type: 'page', lang: 'en', path: '/en', title: 'Home', updatedAt: '...' }],
     })
 

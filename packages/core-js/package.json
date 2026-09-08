@@ -1,6 +1,6 @@
 {
   "name": "@omary98/seo-runtime-core",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Stack-agnostic core of the seo-hub runtime: store, resolveSeo, redirects, sitemap, robots, article ingest, sync.",
   "license": "MIT",
   "repository": { "type": "git", "url": "https://github.com/omary98/seo-runtime.git", "directory": "packages/core-js" },

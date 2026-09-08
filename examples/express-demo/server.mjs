@@ -10,7 +10,7 @@ const app = express()
 seoRuntime({
   store: new JsonFileStore(process.env.DEMO_STATE ?? './.seo-runtime.json'),
   supported: ['en', 'ar'],
-  version: '0.1.0',
+  version: '0.1.1',
   pages: async () => [{ key: 'home', type: 'page', lang: 'en', path: '/en', title: 'Home', updatedAt: '2026-09-01T00:00:00.000Z' }],
 })(app)
 
