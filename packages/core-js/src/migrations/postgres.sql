@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS seo_runtime_state (
   id integer PRIMARY KEY CHECK (id = 1),
-  version integer NOT NULL DEFAULT 0,
+  version bigint NOT NULL DEFAULT 0,
   site_slug text NOT NULL DEFAULT '',
   settings jsonb NOT NULL DEFAULT '{}',
   last_sync_at timestamptz

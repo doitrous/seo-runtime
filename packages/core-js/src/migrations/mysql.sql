@@ -1,9 +1,11 @@
 CREATE TABLE IF NOT EXISTS seo_runtime_state (
   id INTEGER PRIMARY KEY CHECK (id = 1),
-  version INTEGER NOT NULL DEFAULT 0,
+  version BIGINT NOT NULL DEFAULT 0,
   site_slug VARCHAR(191) NOT NULL DEFAULT '',
   settings JSON NOT NULL,
-  last_sync_at DATETIME
+  -- ISO-8601 text, not DATETIME: the store writes `2026-09-08T06:00:00.000Z` and MySQL's DATETIME
+  -- rejects the trailing Z in strict mode; the value is only ever echoed back to the hub.
+  last_sync_at VARCHAR(40)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 -- page_key, not `key`: KEY is a reserved word in MySQL and one of the four sites is MySQL.
 -- The name is the same in all three dialects so one set of SQL strings serves all of them.

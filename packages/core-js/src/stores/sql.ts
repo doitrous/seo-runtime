@@ -167,6 +167,8 @@ export class SqlStore implements SeoStore {
 
   async lastSyncAt(): Promise<string | null> {
     const [state] = await this.q('SELECT last_sync_at FROM seo_runtime_state WHERE id = 1')
-    return state ? (state.last_sync_at as string) ?? null : null
+    // Postgres drivers hand a timestamptz back as a Date; MySQL/SQLite store the ISO text as-is.
+    const v = state?.last_sync_at
+    return v == null ? null : v instanceof Date ? v.toISOString() : String(v)
   }
 }
