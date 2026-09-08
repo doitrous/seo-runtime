@@ -58,3 +58,25 @@ test('an existing title in the shell is replaced, not duplicated', () => {
   assert.doesNotMatch(out, /<title>Old<\/title>/)
   assert.equal(out.match(/<title>/g)!.length, 1)
 })
+
+test('canonical, description, hreflang, OG and Twitter tags baked into the shell are replaced, not doubled', () => {
+  const shell = '<html><head><meta charset="utf-8"><title>old</title>'
+    + '<link rel="canonical" href="https://old.test/x"><LINK href="https://old.test/ar" hreflang="ar" rel="alternate">'
+    + "<meta name='description' content='old'><meta name=\"robots\" content=\"noindex\">"
+    + '<meta property="og:title" content="old"><meta content="old" name="twitter:title">'
+    + '<meta name="viewport" content="width=device-width"><link rel="stylesheet" href="/a.css">'
+    + '<script type="application/ld+json">{"@type":"Organization"}</script></head><body></body></html>'
+  const out = injectHead(shell, seo)
+  const count = (re: RegExp) => (out.match(re) ?? []).length
+  assert.equal(count(/<title>/g), 1)
+  assert.equal(count(/rel="canonical"/g), 1)
+  assert.equal(count(/hreflang=/g), Object.keys(seo.alternates).length)
+  assert.equal(count(/name="description"/g), 1)
+  assert.equal(count(/name="robots"/g), 1)
+  assert.equal(count(/property="og:title"/g), 1)
+  assert.equal(count(/name="twitter:title"/g), 1)
+  assert.doesNotMatch(out, /old\.test/)
+  assert.match(out, /name="viewport"/)
+  assert.match(out, /rel="stylesheet"/)
+  assert.match(out, /"@type":"Organization"/)
+})
