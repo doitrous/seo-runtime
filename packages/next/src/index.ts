@@ -15,7 +15,7 @@ export { withSeoRedirects } from './redirects.ts'
 export type SeoRuntime = ReturnType<typeof createSeo>
 
 export function createSeo(config: SeoConfig) {
-  const version = config.version ?? '0.1.1'
+  const version = config.version ?? '0.1.2'
 
   const resolve = (path: string, lang: string): Promise<ResolvedSeo> => resolveSeo(config.store, path, lang)
 

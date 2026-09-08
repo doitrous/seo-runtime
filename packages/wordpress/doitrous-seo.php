@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Doitrous SEO
  * Description: seo-hub runtime for WordPress. The hub decides page SEO, redirects, sitemap and robots; this plugin renders them.
- * Version: 0.1.1
+ * Version: 0.1.2
  * Requires at least: 6.0
  * Requires PHP: 8.0
  *
@@ -21,7 +21,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('DOITROUS_SEO_VERSION', '0.1.1');
+define('DOITROUS_SEO_VERSION', '0.1.2');
 define('DOITROUS_SEO_DIR', plugin_dir_path(__FILE__));
 define('DOITROUS_SEO_MAX_BODY', 2 * 1024 * 1024);
 
