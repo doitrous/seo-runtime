@@ -1,0 +1,27 @@
+{
+  "name": "doitrous/seo-runtime-laravel",
+  "description": "seo-hub runtime for Laravel: page SEO, redirects, sitemap, robots, article ingest. Root manifest so Composer can install the package straight from this monorepo (a VCS repository needs composer.json at the repository root); the package itself lives in packages/laravel.",
+  "license": "MIT",
+  "require": {
+    "php": "^8.2",
+    "illuminate/support": "^10.0|^11.0|^12.0",
+    "illuminate/database": "^10.0|^11.0|^12.0",
+    "league/commonmark": "^2.4"
+  },
+  "autoload": {
+    "psr-4": {
+      "Doitrous\\SeoRuntime\\": "packages/laravel/src/"
+    }
+  },
+  "extra": {
+    "laravel": {
+      "providers": [
+        "Doitrous\\SeoRuntime\\SeoRuntimeServiceProvider"
+      ],
+      "aliases": {
+        "Seo": "Doitrous\\SeoRuntime\\Seo"
+      }
+    }
+  },
+  "minimum-stability": "stable"
+}
