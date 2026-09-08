@@ -33,6 +33,8 @@ jobs:
       - run: npm run build      # -next and -express import core's dist; build before test
       - run: npm test
       # Order matters: -next and -express depend on the exact core version.
-      - run: npm publish -w @omary98/seo-runtime-core --provenance
-      - run: npm publish -w @omary98/seo-runtime-next --provenance
-      - run: npm publish -w @omary98/seo-runtime-express --provenance
+      # No --provenance: npm only accepts provenance attestations from PUBLIC source repositories
+      # and this one is private (E422 on publish). Re-add the flag if the repo goes public.
+      - run: npm publish -w @omary98/seo-runtime-core
+      - run: npm publish -w @omary98/seo-runtime-next
+      - run: npm publish -w @omary98/seo-runtime-express
