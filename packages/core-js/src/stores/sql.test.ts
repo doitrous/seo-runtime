@@ -146,11 +146,12 @@ test('the MySQL and Postgres migrations use 64-bit version columns and never a D
   // MySQL's DATETIME rejects the `...T...Z` string the store writes (ER_TRUNCATED_WRONG_VALUE),
   // and INTEGER overflows an epoch-millisecond version. Neither can be caught in CI without a
   // MySQL server, so the DDL itself is the regression guard.
-  const mysql = migrationSql('mysql')
+  const ddl = (d: 'mysql' | 'postgres') => migrationSql(d).split('\n').filter((l) => !l.trim().startsWith('--')).join('\n')
+  const mysql = ddl('mysql')
   assert.match(mysql, /version BIGINT NOT NULL/)
   assert.match(mysql, /last_sync_at VARCHAR\(191\)/)
   assert.doesNotMatch(mysql, /DATETIME|TIMESTAMP/)
-  assert.match(migrationSql('postgres'), /version bigint NOT NULL/)
+  assert.match(ddl('postgres'), /version bigint NOT NULL/)
 })
 
 test('lastSyncAt normalises a Date a Postgres driver hands back for timestamptz', async () => {
