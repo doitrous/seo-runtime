@@ -4,8 +4,11 @@ CREATE TABLE IF NOT EXISTS seo_runtime_state (
   site_slug VARCHAR(191) NOT NULL DEFAULT '',
   settings JSON NOT NULL,
   -- ISO-8601 text, not DATETIME: the store writes `2026-09-08T06:00:00.000Z` and MySQL's DATETIME
-  -- rejects the trailing Z in strict mode; the value is only ever echoed back to the hub.
-  last_sync_at VARCHAR(40)
+  -- rejects the T/Z form (ER_TRUNCATED_WRONG_VALUE, an unhandled rejection in the caller); the
+  -- value is only ever echoed back to the hub. VARCHAR(191) like every other timestamp column here.
+  -- version is BIGINT because callers (the conformance fixture among them) use epoch-millisecond
+  -- versions, which overflow a 32-bit INTEGER (ER_WARN_DATA_OUT_OF_RANGE).
+  last_sync_at VARCHAR(191)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 -- page_key, not `key`: KEY is a reserved word in MySQL and one of the four sites is MySQL.
 -- The name is the same in all three dialects so one set of SQL strings serves all of them.

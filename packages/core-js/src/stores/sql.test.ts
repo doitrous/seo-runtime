@@ -131,3 +131,40 @@ test('every dialect ships a migration and they name the same four tables', () =>
       assert.match(sql, new RegExp(t))
   }
 })
+
+test('an epoch-millisecond version round-trips and last_sync_at comes back as ISO text', async () => {
+  // The conformance fixture (and any epoch-based caller) uses Date.now()-scale versions; a 32-bit
+  // column truncates them, which MySQL reports as ER_WARN_DATA_OUT_OF_RANGE from putSnapshot.
+  const store = await fresh()
+  const version = Date.now()
+  await store.putSnapshot({ ...snapshot, version })
+  assert.equal((await store.getSnapshot())!.version, version)
+  assert.match((await store.lastSyncAt()) ?? '', /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)
+})
+
+test('the MySQL and Postgres migrations use 64-bit version columns and never a DATETIME for last_sync_at', () => {
+  // MySQL's DATETIME rejects the `...T...Z` string the store writes (ER_TRUNCATED_WRONG_VALUE),
+  // and INTEGER overflows an epoch-millisecond version. Neither can be caught in CI without a
+  // MySQL server, so the DDL itself is the regression guard.
+  const mysql = migrationSql('mysql')
+  assert.match(mysql, /version BIGINT NOT NULL/)
+  assert.match(mysql, /last_sync_at VARCHAR\(191\)/)
+  assert.doesNotMatch(mysql, /DATETIME|TIMESTAMP/)
+  assert.match(migrationSql('postgres'), /version bigint NOT NULL/)
+})
+
+test('lastSyncAt normalises a Date a Postgres driver hands back for timestamptz', async () => {
+  const iso = '2026-09-08T06:00:00.000Z'
+  const inner = sqliteDriver()
+  const driver: SqlDriver = {
+    dialect: 'sqlite',
+    async query(sql, params) {
+      const rows = await inner.query(sql, params)
+      return /SELECT last_sync_at/.test(sql) ? rows.map((r) => ({ ...r, last_sync_at: new Date(iso) })) : rows
+    },
+  }
+  const store = new SqlStore(driver)
+  await store.migrate()
+  await store.putSnapshot(snapshot)
+  assert.equal(await store.lastSyncAt(), iso)
+})
