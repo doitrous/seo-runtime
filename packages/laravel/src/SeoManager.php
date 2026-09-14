@@ -10,7 +10,7 @@ use Doitrous\SeoRuntime\Support\Snapshot;
 
 class SeoManager
 {
-    public const VERSION = '0.1.3';
+    public const VERSION = '0.1.4';
 
     public function __construct(private EloquentStore $store) {}
 
