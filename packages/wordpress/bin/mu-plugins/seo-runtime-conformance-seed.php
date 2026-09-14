@@ -34,7 +34,18 @@ add_action('init', function () {
         $changed = true;
     }
 
-    if ($changed) flush_rewrite_rules();
+    // save_mod_rewrite_rules() — the part of flush_rewrite_rules() that actually writes
+    // .htaccess — lives in wp-admin/includes/misc.php, which core only autoloads in wp-admin.
+    // On a plain front-end `init` hook it doesn't exist, so WP_Rewrite::flush_rules()'s own
+    // function_exists() guard silently skips the write: the rewrite_rules option gets
+    // regenerated but .htaccess never appears, and every URL under the plugin's own routes
+    // 404s at Apache before WordPress (or the plugin) ever sees the request. Requiring it
+    // ourselves is what makes the "hard" flush actually take on a normal request.
+    if (!function_exists('save_mod_rewrite_rules')) require_once ABSPATH . 'wp-admin/includes/misc.php';
+    // Retried on every request (not just when $changed) so a request that still finds no
+    // .htaccess — e.g. one where the write above raced with something else — gets another go
+    // rather than being stuck forever once permalink_structure already matches.
+    if ($changed || !file_exists(ABSPATH . '.htaccess')) flush_rewrite_rules();
 }, 20);
 
 /**
