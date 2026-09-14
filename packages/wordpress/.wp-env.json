@@ -1,7 +1,6 @@
 {
   "plugins": ["."],
   "port": 8888,
-  "testsEnvironment": false,
   "mappings": {
     "wp-content/mu-plugins": "./bin/mu-plugins"
   },

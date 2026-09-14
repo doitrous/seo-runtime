@@ -28,6 +28,11 @@ function doitrous_seo_apply_redirect(): void {
     // through to the redirect/render below for everything else.
     $key = doitrous_seo_index_now_key_file($settings, $path);
     if ($key !== null) {
+        // This fires on `template_redirect`, after WP has already decided the request is a 404
+        // (nothing in the DB lives at /{key}.txt) and sent that status via send_headers(). Only
+        // echoing the body would leave the 404 status line already sent to the client; the key
+        // file must answer 200.
+        status_header(200);
         header('Content-Type: text/plain; charset=UTF-8');
         echo $key;
         exit;
