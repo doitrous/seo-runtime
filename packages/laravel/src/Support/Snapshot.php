@@ -113,6 +113,10 @@ class Snapshot
 
             return $p;
         }, $s['pages']);
+        // v2's `entity` is a JSON-LD override, same rule as a page's structuredData.
+        if (isset($s['settings']['entity']) && !self::isSchemaOrg($s['settings']['entity'])) {
+            $s['settings']['entity'] = null;
+        }
 
         return $s;
     }
@@ -218,6 +222,12 @@ class Snapshot
             'dateModified' => $page['updatedAt'],
         ], fn ($v) => $v !== null)] : $override;
         $org = self::organizationJsonLd($s);
+        // v2: the site-wide `entity` block, on every path — this port has no route awareness
+        // either, which is exactly the ticket's own fallback for a package with none.
+        $entity = (isset($s['entity']) && self::isSchemaOrg($s['entity'])) ? $s['entity'] : null;
+        $jsonld = $generated;
+        if ($org) $jsonld[] = $org;
+        if ($entity) $jsonld[] = $entity;
 
         return [
             'title' => $title, 'description' => $description, 'canonical' => $canonical,
@@ -225,8 +235,9 @@ class Snapshot
                 'index' => ($seo['index'] ?? true) && ($s['indexingEnabled'] ?? true),
                 'follow' => $seo['follow'] ?? true,
             ],
-            'alternates' => $alternates, 'og' => $og, 'twitter' => $twitter,
-            'jsonld' => $org ? array_merge($generated, [$org]) : $generated,
+            'alternates' => $alternates, 'og' => $og, 'twitter' => $twitter, 'jsonld' => $jsonld,
+            // v2, carried straight from settings so head.blade.php has it without a second fetch.
+            'verification' => $s['verification'] ?? null, 'ga4MeasurementId' => $s['ga4MeasurementId'] ?? null,
         ];
     }
 

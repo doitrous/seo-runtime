@@ -13,4 +13,6 @@
 @if ($seo['twitter']['title'] !== '')<meta name="twitter:title" content="{{ $seo['twitter']['title'] }}">@endif
 @if ($seo['twitter']['description'] !== '')<meta name="twitter:description" content="{{ $seo['twitter']['description'] }}">@endif
 @if ($seo['twitter']['image'] !== '')<meta name="twitter:image" content="{{ $seo['twitter']['image'] }}">@endif
+{!! \Doitrous\SeoRuntime\Support\Entities::verificationMetaTags($seo['verification'] ?? null) !!}
 {!! \Doitrous\SeoRuntime\Support\Snapshot::jsonLdScript($seo['jsonld']) !!}
+{!! \Doitrous\SeoRuntime\Support\Entities::gtagSnippet($seo['ga4MeasurementId'] ?? null) !!}
