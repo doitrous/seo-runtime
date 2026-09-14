@@ -17,15 +17,20 @@ jobs:
       # and must pass against every runtime's demo app. Each step waits for the demo's port with a
       # short curl poll rather than a fixed sleep, then runs the identical suite against it — the
       # suite is stack-agnostic, so this is the same command with a different --base each time.
+      #
+      # suite/pending.test.mjs additionally needs a hub on the other end of SEO_HUB_URL — started
+      # once here, on its own port, ahead of both demos (see mock-hub.mjs's own docblock).
+      - name: start mock hub
+        run: MOCK_HUB_SECRET=ci-secret node packages/conformance/mock-hub.mjs 3199 &
       - name: conformance (express)
         run: |
-          (cd examples/express-demo && SEO_HUB_SECRET=ci-secret SEO_SITE_SLUG=demo PORT=3102 npm start &)
+          (cd examples/express-demo && SEO_HUB_URL=http://localhost:3199 SEO_HUB_SECRET=ci-secret SEO_SITE_SLUG=demo PORT=3102 npm start &)
           for i in $(seq 1 30); do curl -sf http://localhost:3102/en > /dev/null 2>&1 && break; sleep 1; done
           node packages/conformance/run.mjs --base http://localhost:3102 --secret ci-secret --slug demo
       - name: conformance (next)
         run: |
           npm run build -w next-demo
-          (cd examples/next-demo && SEO_HUB_SECRET=ci-secret SEO_SITE_SLUG=demo npm start &)
+          (cd examples/next-demo && SEO_HUB_URL=http://localhost:3199 SEO_HUB_SECRET=ci-secret SEO_SITE_SLUG=demo npm start &)
           for i in $(seq 1 30); do curl -sf http://localhost:3101/en > /dev/null 2>&1 && break; sleep 1; done
           node packages/conformance/run.mjs --base http://localhost:3101 --secret ci-secret --slug demo
       - name: stop demos
@@ -33,6 +38,7 @@ jobs:
         run: |
           pkill -f 'node server.mjs' || true
           pkill -f 'next start' || true
+          pkill -f 'mock-hub.mjs' || true
   php:
     runs-on: ubuntu-latest
     steps:
@@ -53,6 +59,12 @@ jobs:
       # checked out above — no publish/tag step needed.
       - run: composer install --no-interaction
         working-directory: examples/laravel-demo
+      # .env.example already points SEO_HUB_URL at :9999 — suite/pending.test.mjs needs a hub
+      # actually listening there (see mock-hub.mjs's own docblock), started before `artisan serve`
+      # so the boot-time first pull (SeoRuntimeServiceProvider) has something to reach too.
+      - name: start mock hub
+        run: MOCK_HUB_SECRET=demo-secret node ../../packages/conformance/mock-hub.mjs 9999 &
+        working-directory: examples/laravel-demo
       - name: conformance (laravel)
         working-directory: examples/laravel-demo
         run: |
@@ -64,4 +76,37 @@ jobs:
           node ../../packages/conformance/run.mjs --base http://127.0.0.1:8003 --secret demo-secret --slug demo
       - name: stop demo
         if: always()
-        run: pkill -f 'artisan serve' || true
+        run: |
+          pkill -f 'artisan serve' || true
+          pkill -f 'mock-hub.mjs' || true
+  wordpress:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with: { php-version: '8.4' }
+      # The plugin's own plain-PHP tests (no WordPress runtime — see resolve.test.php's docblock):
+      # fast, and catch a fatal error before paying for a wp-env boot.
+      - name: unit tests
+        working-directory: packages/wordpress
+        run: for f in tests/*.test.php; do php "$f" || exit 1; done
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      # wp-env boots WordPress in Docker with the plugin mounted and activated
+      # (packages/wordpress/.wp-env.json). "No exemptions" (packages/CONTRACT.md): the same
+      # conformance suite every other stack runs, against a real WordPress install — see
+      # packages/conformance/README.md's "WordPress" section for the one infra-only exception
+      # (--skip pending: wp-env's WordPress runs inside Docker and cannot reach a mock hub bound
+      # to this runner's own loopback; packages/wordpress/tests/v2.test.php already covers that
+      # route's logic above).
+      - name: wp-env start
+        working-directory: packages/wordpress
+        run: npx --yes @wordpress/env@10 start
+      - name: conformance (wordpress)
+        run: |
+          for i in $(seq 1 60); do curl -sf http://localhost:8888/wp-login.php > /dev/null 2>&1 && break; sleep 2; done
+          node packages/conformance/run.mjs --base http://localhost:8888 --secret demo-secret --slug demo --skip pending
+      - name: wp-env stop
+        if: always()
+        working-directory: packages/wordpress
+        run: npx --yes @wordpress/env@10 stop

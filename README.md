@@ -64,6 +64,12 @@ bodies (redirects, `POST /api/seo/sync`, `POST /api/articles`) with its own 2 MB
 mounting it first means it sees the raw stream rather than one already consumed downstream. See
 `examples/express-demo`.
 
+The package also registers `GET /seo-admin`: a minimal panel listing pending hub-approval jobs
+with Preview/Approve/Reject/Publish-now buttons. It is secret-protected the same way every other
+route is, but since a plain browser visit can't set a custom header, it also accepts the secret
+as a query string: `GET /seo-admin?secret=...` (or `Authorization: Bearer ...`). Treat that URL
+like a password — it belongs behind an internal link, never a public one.
+
 ## Install: Laravel
 
 Composer resolves the package straight from this repository's VCS tag — no separate Packagist
@@ -85,8 +91,9 @@ before the framework's own session/auth stack ever sees the request — in `boot
 
 The provider registers the hub pull (every 6 h) and the health ping (hourly) on Laravel's own
 scheduler — a running `php artisan schedule:work` (or the standard cron entry) is all a host needs;
-there is no separate worker to deploy. Run `php artisan seo-runtime:pull` once after migrating so
-the site has a snapshot before the first scheduled tick.
+there is no separate worker to deploy. The first pull happens automatically, on boot, the first
+time the app serves a request after migrating (guarded so `artisan` commands and PHPUnit never
+trigger it) — `php artisan seo-runtime:pull` still exists if you want to pull on demand.
 
 ## Install: WordPress
 
@@ -106,6 +113,41 @@ the site has a snapshot before the first scheduled tick.
    ```
    SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
    ```
+
+## IndexNow and the web-vitals beacon
+
+Every package registers `POST /api/seo/indexnow` (this site's own secret): the hub calls it after
+publishing a page, and the runtime forwards `{urlList}` to `https://api.indexnow.org/indexnow`
+with `settings.indexNowKey` as the key — the runtime never calls IndexNow on its own, and this is
+the *only* thing that calls it, so a hub that also called IndexNow directly would double-submit.
+(The alternative the ticket allows — the hub calling IndexNow itself — is not implemented here.)
+
+The web-vitals beacon is opt-in and never wired into the head automatically. Include it wherever
+you want a page instrumented:
+
+```js
+// Express / plain HTML
+res.send(html + webVitalsSnippet())   // webVitalsSnippet from @omary98/seo-runtime-core
+```
+
+```tsx
+// Next
+import { SeoWebVitals } from '@omary98/seo-runtime-next'
+<SeoWebVitals />
+```
+
+```blade
+{{-- Laravel --}}
+{!! \Doitrous\SeoRuntime\Support\Entities::webVitalsSnippet() !!}
+```
+
+```php
+<?php echo doitrous_seo_web_vitals_snippet(); ?>
+```
+
+It posts LCP/CLS/best-effort INP to this site's own `POST /api/seo/vitals` — a deliberately
+anonymous route (a real visitor's browser is not a place to keep this site's secret) — which
+attaches the secret server-side and relays the sample to the hub.
 
 ## Releasing
 
