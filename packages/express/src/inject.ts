@@ -1,4 +1,4 @@
-import { escapeHtml, jsonLdScript, type ResolvedSeo } from '@omary98/seo-runtime-core'
+import { escapeHtml, gtagSnippet, jsonLdScript, verificationMetaTags, type ResolvedSeo } from '@omary98/seo-runtime-core'
 
 /**
  * Every attribute and text node is escaped with core's `escapeHtml`; JSON-LD is serialized with
@@ -23,7 +23,9 @@ export function headTags(seo: ResolvedSeo): string {
     meta('twitter:card', seo.twitter.image ? 'summary_large_image' : 'summary'),
     meta('twitter:title', seo.twitter.title), meta('twitter:description', seo.twitter.description),
     meta('twitter:image', seo.twitter.image),
+    verificationMetaTags(seo.verification),
     jsonLdScript(seo.jsonld),
+    gtagSnippet(seo.ga4MeasurementId),
   ].join('')
 }
 
