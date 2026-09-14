@@ -27,7 +27,7 @@ define('DOITROUS_SEO_MAX_BODY', 2 * 1024 * 1024);
 
 // redirects.php, sitemap.php and articles.php ship in B12b; file_exists keeps this plugin
 // bootable with only the four B12 files present, and B12b needs no change here at all.
-foreach (['store', 'resolve', 'redirects', 'sitemap', 'articles', 'head', 'routes'] as $part) {
+foreach (['store', 'resolve', 'entities', 'approval', 'redirects', 'sitemap', 'articles', 'head', 'routes'] as $part) {
     $file = DOITROUS_SEO_DIR . "includes/$part.php";
     if (file_exists($file)) require_once $file;
 }
@@ -61,6 +61,9 @@ function doitrous_seo_article_path(string $lang, string $slug): string {
 }
 
 add_action('init', 'doitrous_seo_register_routes', 0);
+if (function_exists('doitrous_seo_register_admin_menu')) {
+    add_action('admin_menu', 'doitrous_seo_register_admin_menu');
+}
 // redirects.php (B12b) supplies the handler; nothing to run against yet is not an error.
 if (function_exists('doitrous_seo_apply_redirect')) {
     add_action('template_redirect', 'doitrous_seo_apply_redirect', 1);

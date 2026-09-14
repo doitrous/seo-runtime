@@ -22,6 +22,16 @@ function doitrous_seo_apply_redirect(): void {
     if (is_admin()) return;
     $path = doitrous_seo_normalize_path(parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/');
     $settings = doitrous_seo_get_settings() ?? [];
+    // v2: /{key}.txt for IndexNow key verification. Checked here rather than as a rewrite rule —
+    // a pattern broad enough to catch any key would also shadow a theme's own top-level *.txt
+    // handling even when no key is configured; this checks the ONE exact expected path and falls
+    // through to the redirect/render below for everything else.
+    $key = doitrous_seo_index_now_key_file($settings, $path);
+    if ($key !== null) {
+        header('Content-Type: text/plain; charset=UTF-8');
+        echo $key;
+        exit;
+    }
     // /api, /admin, /wp-admin and /wp-json are always reserved, on top of whatever the hub
     // configured — unioned in, not defaulted, so `reservedPrefixes: []` from the hub can never
     // unreserve /api or /admin.
