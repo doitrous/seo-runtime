@@ -19,6 +19,20 @@ test('the sitemap lists the indexable pages with alternates', async () => {
   assert.match(xml, new RegExp(`<loc>${BASE}/en/a</loc><lastmod>2026-09-01</lastmod>`))
 })
 
+// Phase 5: hreflang must be reciprocal, not just present somewhere in the file — checked per
+// <url> block rather than a whole-document substring match, which would pass even if only one
+// side of the pair carried the other's alternate link.
+test('hreflang alternates are reciprocal: the en block links to ar and the ar block links back', async () => {
+  const xml = await (await fetch(`${BASE}/sitemap.xml`)).text()
+  const block = (loc) => {
+    const start = xml.indexOf(`<url><loc>${loc}</loc>`)
+    assert.notEqual(start, -1, `no <url> block for ${loc}`)
+    return xml.slice(start, xml.indexOf('</url>', start) + '</url>'.length)
+  }
+  assert.ok(block(`${BASE}/en/a`).includes(`hreflang="ar" href="${BASE}/ar/a"`))
+  assert.ok(block(`${BASE}/ar/a`).includes(`hreflang="en" href="${BASE}/en/a"`))
+})
+
 test('a noindex page is excluded', async () => {
   const s = snapshot()
   s.pages[0].seo.index = false

@@ -1,6 +1,14 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { BASE, snapshot, sync } from './fixture.mjs'
+import { BASE, snapshot, snapshotWith, sync } from './fixture.mjs'
+
+test('robots renders a per-UA block for each allowed and disallowed crawler', async () => {
+  await sync(snapshotWith({ crawlerPolicy: { allow: ['ClaudeBot'], disallow: ['GPTBot'] } }))
+  const txt = await (await fetch(`${BASE}/robots.txt`)).text()
+  assert.match(txt, /^User-agent: ClaudeBot\nAllow: \/$/m)
+  assert.match(txt, /^User-agent: GPTBot\nDisallow: \/$/m)
+  await sync(snapshot())   // restore the plain fixture for the rest of the suite
+})
 
 test('robots lists the extra lines and the sitemap', async () => {
   await sync(snapshot())

@@ -26,7 +26,24 @@ const suiteDir = join(dirname(fileURLToPath(import.meta.url)), 'suite')
 // at once — or out of order — races on the version and a later file's `stale` sync fails at
 // random. Spawning `node --test <file>` once per file (rather than one `node --test a b c`
 // invocation) is what guarantees that: each spawnSync call blocks until that file's process exits.
-const files = ['sync', 'resolve', 'redirects', 'sitemap', 'robots', 'articles', 'health']
+const allFiles = [
+  'sync', 'resolve', 'redirects', 'sitemap', 'robots', 'articles',
+  // Phase 5: v2 fields/pages, AI-readability, and the pending/approve proxy. `pending` needs the
+  // demo started with SEO_HUB_URL pointing at mock-hub.mjs — see that file's own docblock.
+  'entities', 'readability', 'pending',
+  'health',
+]
+
+// `--skip a,b` (or CONFORMANCE_SKIP) drops files by name. This exists for exactly one case: the
+// WordPress job runs inside wp-env's Docker containers, which cannot reach a mock hub sitting on
+// the CI host's own loopback (see .github/workflows/test.yml's wordpress job and mock-hub.mjs's
+// docblock) — every *contract behaviour* still runs against WordPress with no exemption, `pending`
+// is skipped there purely because the hub-proxy network path is unreachable from inside the
+// container, and packages/wordpress/tests/v2.test.php already covers that route's own logic
+// in-process. Not a general-purpose escape hatch — do not reach for this to skip a file that is
+// merely failing.
+const skip = new Set((args.get('skip') ?? process.env.CONFORMANCE_SKIP ?? '').split(',').map((s) => s.trim()).filter(Boolean))
+const files = allFiles.filter((f) => !skip.has(f))
 
 const env = {
   ...process.env,
