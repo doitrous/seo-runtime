@@ -35,6 +35,12 @@ function esc_attr(string $s): string { return htmlspecialchars($s, ENT_QUOTES, '
 function esc_html(string $s): string { return htmlspecialchars($s, ENT_QUOTES, 'UTF-8'); }
 function esc_url(string $s): string { return htmlspecialchars($s, ENT_QUOTES, 'UTF-8'); }
 
+// wp_kses_post: the real function strips a large denylist; this harness only needs the one property the
+// tests assert on — script tags never survive — mirroring the defence-in-depth articles.php already has.
+function wp_kses_post(string $html): string {
+    return preg_replace('#<script\b[^>]*>.*?</script>#is', '', $html) ?? '';
+}
+
 function wp_json_encode($data, int $options = 0): string|false {
     return json_encode($data, $options);
 }
@@ -145,6 +151,12 @@ $toolLd = doitrous_seo_tool_jsonld($tool, 'https://site/tools/calc');
 check('toolJsonLd is a WebApplication', $toolLd['@type'] === 'WebApplication');
 $toolHtml = doitrous_seo_tool_body_html($tool);
 check('toolBodyHtml renders the placeholder container and methodology block', str_contains($toolHtml, 'id="seo-tool-calc"') && str_contains($toolHtml, '<p>Method.</p>'));
+
+// --- wp_kses_post defence-in-depth on hub-supplied HTML (review finding, PR #1) ------------------
+$xssHelp = ['slug' => 'x', 'lang' => 'en', 'question' => 'Q?', 'answerHtml' => '<p>ok</p><script>alert(1)</script>', 'moneyPageUrl' => '', 'updatedAt' => '2026-09-01T00:00:00.000Z'];
+check('helpBodyHtml passes answerHtml through wp_kses_post (script stripped)', !str_contains(doitrous_seo_help_body_html($xssHelp), '<script') && str_contains(doitrous_seo_help_body_html($xssHelp), '<p>ok</p>'));
+$xssTool = ['slug' => 't', 'lang' => 'en', 'kind' => 'cost-estimator', 'config' => [], 'methodologyHtml' => '<p>m</p><script>alert(1)</script>', 'dataSource' => '', 'asOf' => ''];
+check('toolBodyHtml passes methodologyHtml through wp_kses_post (script stripped)', !str_contains(doitrous_seo_tool_body_html($xssTool), '<script') && str_contains(doitrous_seo_tool_body_html($xssTool), '<p>m</p>'));
 
 // === verification + ga4 ====================================================================
 

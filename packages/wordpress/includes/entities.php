@@ -73,9 +73,10 @@ function doitrous_seo_author_body_html(array $author): string {
     return $html;
 }
 
-/** Question as `<h1>`, answer first — `answerHtml` is pre-rendered, trusted HTML from the hub. */
+/** Question as `<h1>`, answer first — `answerHtml` is pre-rendered HTML from the hub; wp_kses_post is the
+ *  same defence-in-depth articles.php applies to trusted article bodies. */
 function doitrous_seo_help_body_html(array $entry): string {
-    $html = '<h1>' . esc_html($entry['question']) . '</h1><div class="seo-help-answer">' . $entry['answerHtml'] . '</div>';
+    $html = '<h1>' . esc_html($entry['question']) . '</h1><div class="seo-help-answer">' . wp_kses_post($entry['answerHtml']) . '</div>';
     if (!empty($entry['moneyPageUrl'])) $html .= '<p class="seo-help-cta"><a href="' . esc_url($entry['moneyPageUrl']) . '">Learn more</a></p>';
 
     return $html;
@@ -85,7 +86,7 @@ function doitrous_seo_tool_body_html(array $tool): string {
     $config = wp_json_encode($tool['config'] ?? [], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     $html = '<h1>' . esc_html($tool['kind']) . '</h1>'
         . '<div id="seo-tool-' . esc_attr($tool['slug']) . '" class="seo-tool-placeholder" data-kind="' . esc_attr($tool['kind']) . '" data-config="' . esc_attr($config) . '"></div>';
-    if (!empty($tool['methodologyHtml'])) $html .= '<div class="seo-tool-methodology">' . $tool['methodologyHtml'] . '</div>';
+    if (!empty($tool['methodologyHtml'])) $html .= '<div class="seo-tool-methodology">' . wp_kses_post($tool['methodologyHtml']) . '</div>';
     if (!empty($tool['dataSource'])) {
         $html .= '<p class="seo-tool-data-source">Data source: ' . esc_html($tool['dataSource']) . (!empty($tool['asOf']) ? ' (as of ' . esc_html($tool['asOf']) . ')' : '') . '</p>';
     }
