@@ -58,7 +58,21 @@ class EloquentStore
                 'id' => 1, 'version' => $s['version'], 'site_slug' => $s['siteSlug'],
                 'settings' => json_encode($s['settings']), 'last_sync_at' => now(),
             ]);
-            foreach (array_chunk($s['pages'], 200) as $chunk) {
+            // (lang, path) is unique in this table, but the hub is free to send two page records
+            // for the same (lang, path) — the JS stores are a flat array read with Array#find, so
+            // whichever entry comes first just wins there. First-occurrence-wins here too, so a
+            // duplicate never throws a unique-constraint violation back to the sync request (the
+            // contract's sync route is never a 500 for a well-formed body) and both ports agree on
+            // which record renders.
+            $seen = [];
+            $deduped = [];
+            foreach ($s['pages'] as $p) {
+                $k = $p['lang'] . '|' . Snapshot::normalizePath($p['path']);
+                if (isset($seen[$k])) continue;
+                $seen[$k] = true;
+                $deduped[] = $p;
+            }
+            foreach (array_chunk($deduped, 200) as $chunk) {
                 DB::table('seo_runtime_pages')->insert(array_map(fn ($p) => [
                     'page_key' => $p['key'], 'type' => $p['type'], 'lang' => $p['lang'],
                     'path' => Snapshot::normalizePath($p['path']), 'group_key' => $p['group'],
