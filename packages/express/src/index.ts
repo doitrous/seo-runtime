@@ -6,6 +6,7 @@ import {
   readConfig, redirectFor, resolveSeo, robotsTxt, sitemapEntries, sitemapXml, startSync,
   submitIndexNow, submitVitals, timingSafeSecret, toolBodyHtml, toolJsonLd,
   type ApprovalAction, type ArticlePath, type IngestOptions, type ResolvedSeo, type SeoStore,
+  RUNTIME_VERSION,
 } from '@omary98/seo-runtime-core'
 import { injectHead } from './inject.ts'
 import { seoAdminHtml } from './admin.ts'
@@ -100,7 +101,7 @@ async function articlePages(store: SeoStore, articlePath: ArticlePath): Promise<
  * mounting those.
  */
 export function seoRuntime(opts: ExpressSeoOptions) {
-  const version = opts.version ?? '0.1.2'
+  const version = opts.version ?? RUNTIME_VERSION
   const articlePath = opts.articlePath ?? DEFAULT_ARTICLE_PATH
 
   const auth: RequestHandler = (req, res, next) => {

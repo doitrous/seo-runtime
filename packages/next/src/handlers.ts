@@ -3,6 +3,7 @@ import {
   ingestArticles, proxyApprovalAction, proxyPending, readConfig, resolveSeo, submitIndexNow,
   submitVitals, timingSafeSecret,
   type ApprovalAction, type ArticlePath, type IngestOptions, type ResolvedSeo, type SeoStore,
+  RUNTIME_VERSION,
 } from '@omary98/seo-runtime-core'
 
 export const MAX_BODY_BYTES = 2 * 1024 * 1024
@@ -76,7 +77,7 @@ export async function articlePages(store: SeoStore, articlePath: ArticlePath): P
 }
 
 export async function handleSeoGet(config: SeoConfig, req: Request, route: string): Promise<Response> {
-  const version = config.version ?? '0.1.2'
+  const version = config.version ?? RUNTIME_VERSION
   // Health is authenticated like everything else: it names the site and enumerates every
   // redirect source path. It has no side effect — the counters are drained by `sendHealth`,
   // after the hub answers 2xx.
