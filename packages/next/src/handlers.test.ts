@@ -144,6 +144,103 @@ test('the probe returns resolveSeo and needs the secret', async () => {
   cleanup()
 })
 
+test('v2: pending proxies the hub with the site secret and passes the status/body through', async () => {
+  const { seo, cleanup } = runtime()
+  const original = global.fetch
+  let seenUrl = '', seenAuth = ''
+  global.fetch = (async (u: string | URL | Request, init?: RequestInit) => {
+    seenUrl = String(u)
+    seenAuth = String((init?.headers as Record<string, string>)?.Authorization)
+    return new Response(JSON.stringify({ jobs: [{ id: 1 }] }), { status: 200 })
+  }) as typeof fetch
+  process.env.SEO_HUB_URL = 'https://hub.test'
+  try {
+    const res = await seo.handlers.GET(get('/api/seo/pending'), ctx('pending'))
+    assert.equal(res.status, 200)
+    assert.deepEqual(await res.json(), { jobs: [{ id: 1 }] })
+    assert.equal(seenUrl, 'https://hub.test/api/sites/demo/pending')
+    assert.equal(seenAuth, 'Bearer s3cret')
+  } finally {
+    global.fetch = original
+    delete process.env.SEO_HUB_URL
+    cleanup()
+  }
+})
+
+test('v2: approve/reject/publish-now POST {approvedBy, note} and relay the hub status verbatim', async () => {
+  const { seo, cleanup } = runtime()
+  const original = global.fetch
+  let seenUrl = '', seenBody: unknown = null
+  global.fetch = (async (u: string | URL | Request, init?: RequestInit) => {
+    seenUrl = String(u)
+    seenBody = JSON.parse(String(init?.body))
+    return new Response(JSON.stringify({ error: 'publish_blocked', reason: 'draft_only' }), { status: 409 })
+  }) as typeof fetch
+  process.env.SEO_HUB_URL = 'https://hub.test'
+  try {
+    const res = await seo.handlers.POST(post('/api/seo/publish-now', { jobId: '5', approvedBy: 'Jane', note: 'ok' }), ctx('publish-now'))
+    assert.equal(res.status, 409)
+    assert.deepEqual(await res.json(), { error: 'publish_blocked', reason: 'draft_only' })
+    assert.match(seenUrl, /\/jobs\/5\/publish-now$/)
+    assert.deepEqual(seenBody, { approvedBy: 'Jane', note: 'ok' })
+  } finally {
+    global.fetch = original
+    delete process.env.SEO_HUB_URL
+    cleanup()
+  }
+})
+
+test('v2: indexnow needs the site secret, then forwards urlList to IndexNow with the site key', async () => {
+  const { seo, store, cleanup } = runtime()
+  await store.putSnapshot({ ...snapshot, settings: { ...snapshot.settings, indexNowKey: 'the-key' } })
+  const denied = await seo.handlers.POST(post('/api/seo/indexnow', { urlList: ['https://demo.test/en/a'] }, 'Bearer no'), ctx('indexnow'))
+  assert.equal(denied.status, 401)
+
+  const original = global.fetch
+  let seenUrl = '', seenBody: unknown = null
+  global.fetch = (async (u: string | URL | Request, init?: RequestInit) => {
+    seenUrl = String(u)
+    seenBody = JSON.parse(String(init?.body))
+    return new Response('', { status: 200 })
+  }) as typeof fetch
+  try {
+    const res = await seo.handlers.POST(post('/api/seo/indexnow', { urlList: ['https://demo.test/en/a'] }), ctx('indexnow'))
+    assert.equal(res.status, 200)
+    assert.equal(seenUrl, 'https://api.indexnow.org/indexnow')
+    assert.deepEqual(seenBody, { host: 'demo.test', key: 'the-key', keyLocation: 'https://demo.test/the-key.txt', urlList: ['https://demo.test/en/a'] })
+  } finally {
+    global.fetch = original
+    cleanup()
+  }
+})
+
+test('v2: the vitals beacon needs no secret and relays the sample to the hub with one', async () => {
+  const { seo, cleanup } = runtime()
+  const original = global.fetch
+  let seenAuth = '', seenBody: unknown = null
+  global.fetch = (async (_u: string | URL | Request, init?: RequestInit) => {
+    seenAuth = String((init?.headers as Record<string, string>)?.Authorization)
+    seenBody = JSON.parse(String(init?.body))
+    return new Response(null, { status: 204 })
+  }) as typeof fetch
+  process.env.SEO_HUB_URL = 'https://hub.test'
+  try {
+    // No Authorization header at all — a real visitor's browser sends none.
+    const req = new Request('https://demo.test/api/seo/vitals', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ url: 'https://demo.test/en/a', lcp: 1200, inp: 50, cls: 0.01 }),
+    })
+    const res = await seo.handlers.POST(req, ctx('vitals'))
+    assert.equal(res.status, 204)
+    assert.equal(seenAuth, 'Bearer s3cret')
+    assert.deepEqual(seenBody, { siteSlug: 'demo', url: 'https://demo.test/en/a', lcp: 1200, inp: 50, cls: 0.01, source: 'rum' })
+  } finally {
+    global.fetch = original
+    delete process.env.SEO_HUB_URL
+    cleanup()
+  }
+})
+
 test('an unknown route is a 404', async () => {
   const { seo, cleanup } = runtime()
   assert.equal((await seo.handlers.GET(get('/api/seo/nope'), ctx('nope'))).status, 404)

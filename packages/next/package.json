@@ -7,7 +7,10 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "exports": { ".": "./dist/index.js", "./edge": "./dist/edge.js", "./package.json": "./package.json" },
+  "exports": {
+    ".": "./dist/index.js", "./edge": "./dist/edge.js",
+    "./approval-panel": "./dist/approval-panel.js", "./package.json": "./package.json"
+  },
   "files": ["dist"],
   "publishConfig": { "access": "public" },
   "scripts": {
