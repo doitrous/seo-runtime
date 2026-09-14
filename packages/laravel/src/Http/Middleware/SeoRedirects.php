@@ -19,6 +19,13 @@ class SeoRedirects
 {
     public function handle(Request $request, Closure $next): Response
     {
+        // v2: /{key}.txt for IndexNow key verification. Checked here rather than as a router
+        // route — a route pattern broad enough to catch any key would also shadow the host app's
+        // own top-level *.txt routes even when no key is configured; this checks the ONE exact
+        // expected path and falls through to $next for everything else, same as a redirect miss.
+        $key = Seo::indexNowKeyFile($request->getPathInfo());
+        if ($key !== null) return response($key, 200, ['Content-Type' => 'text/plain; charset=UTF-8']);
+
         $hit = Seo::redirect($request->getPathInfo());
         if ($hit) return redirect($hit['destination'], $hit['status']);
 

@@ -25,6 +25,11 @@ export const snapshot = (over = {}) => ({
   },
   pages: [
     page('en', '/en/a'), page('ar', '/ar/a'),
+    // The demo's actual rendered home routes (/en, /ar) — a separate group from the /en/a,/ar/a
+    // pair above so existing tests that key off that pair (sitemap counts, the noindex test,
+    // etc.) are untouched. Phase 5's readability.test.mjs drives real hreflang/word-count/heading
+    // checks against these two, rendered for real by every demo (see each demo's home route/view).
+    page('en', '/en', 'p:home', 'Home'), page('ar', '/ar', 'p:home', 'Home'),
   ],
   redirects: [
     { source: '/old', destination: '/en/a', type: 301, active: true },
@@ -38,9 +43,9 @@ export const snapshot = (over = {}) => ({
   ...over,
 })
 
-function page(lang, path) {
+function page(lang, path, group = 'p:1', title = 'A') {
   return {
-    key: 'p:1', type: 'page', lang, path, group: 'p:1', title: 'A', updatedAt: '2026-09-01T00:00:00.000Z',
+    key: group, type: 'page', lang, path, group, title, updatedAt: '2026-09-01T00:00:00.000Z',
     seo: {
       seoTitle: 'A page', metaDescription: 'About A.', canonical: '', index: true, follow: true,
       includeInSitemap: true, priority: 0.8,
@@ -50,8 +55,32 @@ function page(lang, path) {
   }
 }
 
+/**
+ * Every v2 field (crawlerPolicy, entity, authors, helpEntries, tools, verification,
+ * indexNowKey, ga4MeasurementId) lives inside `settings` (packages/CONTRACT.md's "v2 fields"
+ * section) — this merges `settingsOver` onto the fixture's normal settings rather than replacing
+ * `pages`/`redirects`, the way `snapshot(over)`'s own top-level `...over` spread would.
+ */
+export function snapshotWith(settingsOver, over = {}) {
+  const base = snapshot(over)
+  return { ...base, settings: { ...base.settings, ...settingsOver } }
+}
+
 export const sync = (body) => fetch(`${BASE}/api/seo/sync`, { method: 'POST', headers: auth, body: JSON.stringify(body) })
 export const probe = (path, lang) => fetch(`${BASE}/api/seo/probe?path=${encodeURIComponent(path)}&lang=${lang}`, { headers: auth })
 export const health = () => fetch(`${BASE}/api/seo/health`, { headers: auth })
 export const healthAnon = () => fetch(`${BASE}/api/seo/health`)
 export const articles = (body) => fetch(`${BASE}/api/articles`, { method: 'POST', headers: auth, body: JSON.stringify(body) })
+
+// AI-readability helpers (readability.test.mjs): plain-text word count and heading-level order,
+// read straight off a rendered page's raw HTML rather than a DOM parser this suite has no
+// dependency on.
+export function textOf(html) {
+  return html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ')
+}
+export function wordCount(html) {
+  return textOf(html).trim().split(/\s+/).filter(Boolean).length
+}
+export function headingLevels(html) {
+  return [...html.matchAll(/<h([1-6])\b/gi)].map((m) => Number(m[1]))
+}

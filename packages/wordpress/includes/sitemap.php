@@ -117,6 +117,11 @@ function doitrous_seo_route_sitemap(): void {
     exit;
 }
 
+/** No CR/LF: a UA name is one robots.txt line and must never be able to inject a second one. */
+function doitrous_seo_safe_ua(string $ua): string {
+    return str_replace(["\r", "\n"], '', trim($ua));
+}
+
 function doitrous_seo_route_robots(): void {
     header('Content-Type: text/plain; charset=UTF-8');
     $snapshot = doitrous_seo_get_snapshot();
@@ -126,6 +131,15 @@ function doitrous_seo_route_robots(): void {
     $urls = $s['baseUrls'] ?? [];
     $base = rtrim(reset($urls) ?: '', '/');
     $lines = array_merge(['User-agent: *', 'Allow: /'], array_filter($s['robotsExtra'] ?? []));
+    // v2: per-UA blocks for named crawlers (GPTBot, ClaudeBot, …).
+    foreach ($s['crawlerPolicy']['allow'] ?? [] as $ua) {
+        $u = doitrous_seo_safe_ua($ua);
+        if ($u !== '') $lines = array_merge($lines, ['', "User-agent: $u", 'Allow: /']);
+    }
+    foreach ($s['crawlerPolicy']['disallow'] ?? [] as $ua) {
+        $u = doitrous_seo_safe_ua($ua);
+        if ($u !== '') $lines = array_merge($lines, ['', "User-agent: $u", 'Disallow: /']);
+    }
     if ($base !== '') $lines = array_merge($lines, ['', "Sitemap: $base/sitemap.xml"]);
     echo implode("\n", $lines) . "\n";
     exit;

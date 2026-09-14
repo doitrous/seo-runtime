@@ -10,6 +10,9 @@ import { seoRuntime, type ExpressSeoOptions } from './index.ts'
 
 process.env.SEO_HUB_SECRET = 's3cret'
 process.env.SEO_SITE_SLUG = 'demo'
+// Deliberately NOT set here: every existing test in this file boots with SEO_HUB_URL unset, which
+// is what makes startSync's boot-time pullSnapshot/sendHealth no-op instead of reaching out to a
+// real network. The two v2 proxy tests below set it only for the moment they need it.
 
 const snapshot: Snapshot = {
   version: 1, siteSlug: 'demo',
@@ -208,4 +211,160 @@ test('the sitemap is empty with no snapshot and lists pages once one is applied'
   await fetch(`${url}/api/seo/sync`, { method: 'POST', headers: { ...authed, 'content-type': 'application/json' }, body: JSON.stringify(snapshot) })
   const filled = await (await fetch(`${url}/sitemap.xml`)).text()
   assert.match(filled, /https:\/\/demo\.test\/en\/a/)
+})
+
+test('v2: an author page renders a Person JSON-LD block and 404s for an unknown slug', async (t) => {
+  const { url } = await boot(t)
+  const withAuthor: Snapshot = { ...snapshot, settings: { ...snapshot.settings, authors: [{ slug: 'jane', name: 'Jane Doe', title: 'Editor', credentials: '', sameAs: [], bio: '' }] } }
+  await fetch(`${url}/api/seo/sync`, { method: 'POST', headers: { ...authed, 'content-type': 'application/json' }, body: JSON.stringify(withAuthor) })
+  const html = await (await fetch(`${url}/authors/jane`)).text()
+  assert.match(html, /<h1>Jane Doe<\/h1>/)
+  assert.match(html, /"@type":"Person"/)
+  assert.equal((await fetch(`${url}/authors/nope`)).status, 404)
+})
+
+test('v2: a help page puts the question in an h1 with an Article JSON-LD carrying dateModified', async (t) => {
+  const { url } = await boot(t)
+  const withHelp: Snapshot = { ...snapshot, settings: { ...snapshot.settings, helpEntries: [{ slug: 'refund', lang: 'en', question: 'How do refunds work?', answerHtml: '<p>Answer.</p>', moneyPageUrl: '/pricing', updatedAt: '2026-09-01T00:00:00.000Z' }] } }
+  await fetch(`${url}/api/seo/sync`, { method: 'POST', headers: { ...authed, 'content-type': 'application/json' }, body: JSON.stringify(withHelp) })
+  const html = await (await fetch(`${url}/help/refund`)).text()
+  assert.match(html, /<h1>How do refunds work\?<\/h1>/)
+  assert.match(html, /"@type":"Article"/)
+  assert.match(html, /"dateModified":"2026-09-01T00:00:00.000Z"/)
+})
+
+test('v2: a tool page renders the placeholder container with a WebApplication JSON-LD', async (t) => {
+  const { url } = await boot(t)
+  const withTool: Snapshot = { ...snapshot, settings: { ...snapshot.settings, tools: [{ slug: 'calc', lang: 'en', kind: 'Calculator', config: {}, methodologyHtml: '<p>Method.</p>', dataSource: 'ONS', asOf: '2026-08-01' }] } }
+  await fetch(`${url}/api/seo/sync`, { method: 'POST', headers: { ...authed, 'content-type': 'application/json' }, body: JSON.stringify(withTool) })
+  const html = await (await fetch(`${url}/tools/calc`)).text()
+  assert.match(html, /id="seo-tool-calc"/)
+  assert.match(html, /"@type":"WebApplication"/)
+})
+
+// The mocked fetch below must discriminate by URL: the outer test request to the local test
+// server (127.0.0.1) has to reach the REAL fetch, and only the proxy's own internal call to
+// SEO_HUB_URL ('https://hub.test') is the one this suite wants to intercept.
+function mockHubFetch(handler: (url: string, init?: RequestInit) => Response | Promise<Response>) {
+  const original = global.fetch
+  global.fetch = (async (u: string | URL | Request, init?: RequestInit) => {
+    const url = String(u)
+    return url.startsWith('https://hub.test') ? handler(url, init) : original(u as never, init)
+  }) as typeof fetch
+  return original
+}
+
+test('v2: the pending proxy forwards the site secret and passes the hub status/body through', async (t) => {
+  const { url } = await boot(t)   // boots with SEO_HUB_URL still unset — startSync's own pull/health stay no-ops
+  let seenAuth = ''
+  const original = mockHubFetch((_u, init) => {
+    seenAuth = String((init?.headers as Record<string, string>)?.Authorization)
+    return new Response(JSON.stringify({ jobs: [{ id: 7 }] }), { status: 200 })
+  })
+  process.env.SEO_HUB_URL = 'https://hub.test'
+  try {
+    const res = await fetch(`${url}/api/seo/pending`, { headers: authed })
+    assert.equal(res.status, 200)
+    assert.deepEqual(await res.json(), { jobs: [{ id: 7 }] })
+    assert.equal(seenAuth, 'Bearer s3cret')
+  } finally {
+    global.fetch = original
+    delete process.env.SEO_HUB_URL
+  }
+})
+
+test('v2: the pending proxy needs the site secret', async (t) => {
+  const { url } = await boot(t)
+  assert.equal((await fetch(`${url}/api/seo/pending`)).status, 401)
+})
+
+test('v2: approve posts {approvedBy, note} to the hub and relays a publish_blocked error', async (t) => {
+  const { url } = await boot(t)
+  let seenUrl = '', seenBody: unknown = null
+  const original = mockHubFetch((u, init) => {
+    seenUrl = u
+    seenBody = JSON.parse(String(init?.body))
+    return new Response(JSON.stringify({ error: 'publish_blocked', reason: 'draft_only' }), { status: 409 })
+  })
+  process.env.SEO_HUB_URL = 'https://hub.test'
+  try {
+    const res = await fetch(`${url}/api/seo/approve`, {
+      method: 'POST', headers: { ...authed, 'content-type': 'application/json' },
+      body: JSON.stringify({ jobId: '9', approvedBy: 'Jane', note: 'ok' }),
+    })
+    assert.equal(res.status, 409)
+    assert.deepEqual(await res.json(), { error: 'publish_blocked', reason: 'draft_only' })
+    assert.match(seenUrl, /\/jobs\/9\/approve$/)
+    assert.deepEqual(seenBody, { approvedBy: 'Jane', note: 'ok' })
+  } finally {
+    global.fetch = original
+    delete process.env.SEO_HUB_URL
+  }
+})
+
+test('v2: indexnow needs the site secret, then forwards urlList to IndexNow with the site key', async (t) => {
+  const { url, store } = await boot(t)
+  await store.putSnapshot({ ...snapshot, settings: { ...snapshot.settings, indexNowKey: 'the-key' } })
+  assert.equal((await fetch(`${url}/api/seo/indexnow`, { method: 'POST' })).status, 401)
+
+  const original = global.fetch
+  let seenUrl = '', seenBody: unknown = null
+  global.fetch = (async (u: string | URL | Request, init?: RequestInit) => {
+    const s = String(u)
+    if (!s.startsWith('https://api.indexnow.org')) return original(u as never, init)
+    seenUrl = s
+    seenBody = JSON.parse(String(init?.body))
+    return new Response('', { status: 200 })
+  }) as typeof fetch
+  try {
+    const res = await fetch(`${url}/api/seo/indexnow`, {
+      method: 'POST', headers: { ...authed, 'content-type': 'application/json' },
+      body: JSON.stringify({ urlList: ['https://demo.test/en/a'] }),
+    })
+    assert.equal(res.status, 200)
+    assert.equal(seenUrl, 'https://api.indexnow.org/indexnow')
+    assert.deepEqual(seenBody, { host: 'demo.test', key: 'the-key', keyLocation: 'https://demo.test/the-key.txt', urlList: ['https://demo.test/en/a'] })
+  } finally {
+    global.fetch = original
+  }
+})
+
+test('v2: the vitals beacon needs no secret and relays the sample to the hub with one', async (t) => {
+  const { url } = await boot(t)
+  let seenAuth = '', seenBody: unknown = null
+  const original = mockHubFetch((_u, init) => {
+    seenAuth = String((init?.headers as Record<string, string>)?.Authorization)
+    seenBody = JSON.parse(String(init?.body))
+    return new Response(null, { status: 204 })
+  })
+  process.env.SEO_HUB_URL = 'https://hub.test'
+  try {
+    const res = await fetch(`${url}/api/seo/vitals`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },   // no Authorization at all
+      body: JSON.stringify({ url: 'https://demo.test/en/a', lcp: 1200, inp: 50, cls: 0.01 }),
+    })
+    assert.equal(res.status, 204)
+    assert.equal(seenAuth, 'Bearer s3cret')
+    assert.deepEqual(seenBody, { siteSlug: 'demo', url: 'https://demo.test/en/a', lcp: 1200, inp: 50, cls: 0.01, source: 'rum' })
+  } finally {
+    global.fetch = original
+    delete process.env.SEO_HUB_URL
+  }
+})
+
+test('v2: the admin panel is secret-protected via ?secret= or the Authorization header', async (t) => {
+  const { url } = await boot(t)
+  assert.equal((await fetch(`${url}/seo-admin`)).status, 401)
+  assert.equal((await fetch(`${url}/seo-admin?secret=s3cret`)).status, 200)
+  assert.equal((await fetch(`${url}/seo-admin`, { headers: authed })).status, 200)
+})
+
+test('v2: the IndexNow key file is served at /{key}.txt with the key as the body', async (t) => {
+  const { url } = await boot(t)
+  const withKey: Snapshot = { ...snapshot, settings: { ...snapshot.settings, indexNowKey: 'abc123def' } }
+  await fetch(`${url}/api/seo/sync`, { method: 'POST', headers: { ...authed, 'content-type': 'application/json' }, body: JSON.stringify(withKey) })
+  const res = await fetch(`${url}/abc123def.txt`)
+  assert.equal(res.status, 200)
+  assert.equal((await res.text()).trim(), 'abc123def')
+  assert.equal((await fetch(`${url}/other.txt`)).status, 404)
 })

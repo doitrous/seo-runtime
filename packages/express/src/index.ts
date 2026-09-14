@@ -1,11 +1,14 @@
 import type { Request, RequestHandler, Response, Router } from 'express'
 import {
-  absoluteUrl, applySnapshot, bearerOf, DEFAULT_ARTICLE_PATH, EMPTY_SETTINGS, healthPayload,
-  ingestArticles, normalizePath, readConfig, redirectFor, resolveSeo, robotsTxt, sitemapEntries,
-  sitemapXml, startSync, timingSafeSecret,
-  type ArticlePath, type IngestOptions, type ResolvedSeo, type SeoStore,
+  absoluteUrl, applySnapshot, authorBodyHtml, bearerOf, DEFAULT_ARTICLE_PATH, EMPTY_SETTINGS,
+  findAuthor, findHelpEntry, findTool, healthPayload, helpArticleJsonLd, helpBodyHtml,
+  indexNowKeyFile, ingestArticles, normalizePath, personJsonLd, proxyApprovalAction, proxyPending,
+  readConfig, redirectFor, resolveSeo, robotsTxt, sitemapEntries, sitemapXml, startSync,
+  submitIndexNow, submitVitals, timingSafeSecret, toolBodyHtml, toolJsonLd,
+  type ApprovalAction, type ArticlePath, type IngestOptions, type ResolvedSeo, type SeoStore,
 } from '@omary98/seo-runtime-core'
 import { injectHead } from './inject.ts'
+import { seoAdminHtml } from './admin.ts'
 
 export { headTags, injectHead } from './inject.ts'
 
@@ -162,6 +165,58 @@ export function seoRuntime(opts: ExpressSeoOptions) {
       res.status(out.status).json(out.body)
     })
 
+    // v2: pending/approve proxy. This site's own secret in (the `auth` middleware above), the
+    // hub's runtime secret out (proxyPending/proxyApprovalAction, in core). The hub's status and
+    // body — publish_blocked included — are passed through verbatim.
+    app.get('/api/seo/pending', auth, async (_req, res) => {
+      const out = await proxyPending(opts.store)
+      res.status(out.status).json(out.body)
+    })
+
+    // These three routes read their own JSON body the same way sync/articles do — see readBody's
+    // own docblock — rather than depending on the host having a body parser mounted.
+    for (const action of ['approve', 'reject', 'publish-now'] as ApprovalAction[]) {
+      app.post(`/api/seo/${action}`, auth, async (req, res) => {
+        const read = await readBody(req, MAX_BODY_BYTES)
+        if (!read) { tooLarge(res); return }
+        const body = (read.body ?? {}) as { jobId?: string; approvedBy?: string; note?: string }
+        const out = await proxyApprovalAction(opts.store, action, String(body.jobId ?? ''), { approvedBy: String(body.approvedBy ?? ''), note: body.note })
+        res.status(out.status).json(out.body)
+      })
+    }
+
+    // v2: IndexNow. This site's own secret in (`auth`, same as every other /api/seo/* route),
+    // then forwards { urlList } to api.indexnow.org with settings.indexNowKey (submitIndexNow,
+    // in core) — the hub is expected to call this after it publishes rather than calling
+    // IndexNow itself (README.md documents the choice).
+    app.post('/api/seo/indexnow', auth, async (req, res) => {
+      const read = await readBody(req, MAX_BODY_BYTES)
+      if (!read) { tooLarge(res); return }
+      const settings = (await opts.store.getSettings()) ?? EMPTY_SETTINGS
+      const body = (read.body ?? {}) as { urlList?: unknown }
+      const out = await submitIndexNow(settings, body.urlList)
+      res.status(out.status).json(out.body)
+    })
+
+    // v2: the opt-in web-vitals beacon (webVitalsSnippet, in core) posts here with NO secret —
+    // it runs in a real visitor's browser, which is not a place to keep this site's secret. The
+    // secret is attached only on the way OUT, to the hub (submitVitals, in core).
+    app.post('/api/seo/vitals', async (req, res) => {
+      const read = await readBody(req, MAX_BODY_BYTES)
+      if (!read) { tooLarge(res); return }
+      const body = (read.body ?? {}) as { url?: string; lcp?: number; inp?: number; cls?: number }
+      const out = await submitVitals(opts.store, { url: String(body.url ?? ''), lcp: body.lcp, inp: body.inp, cls: body.cls })
+      res.status(out.status).json(out.body)
+    })
+
+    // v2: the minimal admin panel. Secret-protected via `?secret=` or `Authorization: Bearer` —
+    // documented in README.md — since a plain browser visit can't set a custom header on its own.
+    app.get('/seo-admin', async (req, res) => {
+      const given = String(req.query.secret ?? '') || bearerOf(req.headers.authorization)
+      if (!timingSafeSecret(given, readConfig().secret)) { res.status(401).type('text/plain').send('unauthorized'); return }
+      res.type('html').send(seoAdminHtml(given))
+    })
+
     // Phase 1 ships a single /sitemap.xml only — no sitemap index / /sitemap-:page.xml route
     // (CONTRACT.md, deferred to phase 2). `sitemapXml` throws rather than truncating a sitemap
     // over the 5,000-URL limit; that is answered 500 with a clear message, not a silent 200.
@@ -184,6 +239,53 @@ export function seoRuntime(opts: ExpressSeoOptions) {
 
     app.get('/robots.txt', async (_req, res) => {
       res.type('text/plain').send(robotsTxt(await opts.store.getSnapshot()))
+    })
+
+    // v2: /{key}.txt for IndexNow key verification. Checked ahead of the author/help/tool
+    // routes below since a key can collide in shape with nothing else this package serves.
+    app.get(/^\/[^/]+\.txt$/, async (req, res, next) => {
+      const settings = (await opts.store.getSettings()) ?? EMPTY_SETTINGS
+      const key = indexNowKeyFile(settings, req.path)
+      if (key) { res.type('text/plain').send(key); return }
+      next()
+    })
+
+    // v2 content pages, rendered by the package itself (unlike an article: these are new page
+    // types the ticket asks the runtime to render, not just resolve metadata for).
+    app.get('/authors/:slug', async (req, res) => {
+      const settings = (await opts.store.getSettings()) ?? EMPTY_SETTINGS
+      const author = findAuthor(settings, req.params.slug)
+      if (!author) { res.status(404).type('text/plain').send('not found'); return }
+      const lang = String(req.query.lang ?? opts.supported?.[0] ?? 'en')
+      const path = `/authors/${author.slug}`
+      const seo = await resolveSeo(opts.store, path, lang)
+      const jsonld = [...seo.jsonld, personJsonLd(author, absoluteUrl(settings, lang, path))]
+      const html = await injectHead(`<html><head></head><body></body></html>`, { ...seo, jsonld })
+      res.type('html').send(html.replace('<body></body>', `<body>${authorBodyHtml(author)}</body>`))
+    })
+
+    app.get('/help/:slug', async (req, res) => {
+      const settings = (await opts.store.getSettings()) ?? EMPTY_SETTINGS
+      const lang = String(req.query.lang ?? opts.supported?.[0] ?? 'en')
+      const entry = findHelpEntry(settings, req.params.slug, lang)
+      if (!entry) { res.status(404).type('text/plain').send('not found'); return }
+      const path = `/help/${entry.slug}`
+      const seo = await resolveSeo(opts.store, path, lang)
+      const jsonld = [...seo.jsonld, helpArticleJsonLd(entry, absoluteUrl(settings, lang, path))]
+      const html = await injectHead(`<html><head></head><body></body></html>`, { ...seo, jsonld })
+      res.type('html').send(html.replace('<body></body>', `<body>${helpBodyHtml(entry)}</body>`))
+    })
+
+    app.get('/tools/:slug', async (req, res) => {
+      const settings = (await opts.store.getSettings()) ?? EMPTY_SETTINGS
+      const lang = String(req.query.lang ?? opts.supported?.[0] ?? 'en')
+      const tool = findTool(settings, req.params.slug, lang)
+      if (!tool) { res.status(404).type('text/plain').send('not found'); return }
+      const path = `/tools/${tool.slug}`
+      const seo = await resolveSeo(opts.store, path, lang)
+      const jsonld = [...seo.jsonld, toolJsonLd(tool, absoluteUrl(settings, lang, path))]
+      const html = await injectHead(`<html><head></head><body></body></html>`, { ...seo, jsonld })
+      res.type('html').send(html.replace('<body></body>', `<body>${toolBodyHtml(tool)}</body>`))
     })
 
     // 3. res.locals.seo for the site's own views, and injectHead for an SPA shell. Resolution is

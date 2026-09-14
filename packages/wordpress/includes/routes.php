@@ -5,18 +5,82 @@ if (!defined('ABSPATH')) exit;
 /** Anonymous routes; everything else needs the bearer secret. */
 const DOITROUS_SEO_PUBLIC_ROUTES = ['GET /sitemap.xml', 'GET /robots.txt'];
 
+/**
+ * v2 content pages, rendered by the plugin itself (unlike an article: these are new page types
+ * the ticket asks the runtime to render, not just resolve metadata for). Specific literal
+ * prefixes, same risk profile as /sitemap.xml and /robots.txt — checked before the exact-match
+ * table below since they carry a dynamic {slug} segment the table can't express.
+ */
+function doitrous_seo_dispatch_v2_content_route(string $method, string $path): bool {
+    if ($method !== 'GET') return false;
+    foreach (['authors' => 'author', 'help' => 'help_entry', 'tools' => 'tool'] as $prefix => $kind) {
+        if (!str_starts_with($path, "/$prefix/")) continue;
+        $slug = substr($path, strlen("/$prefix/"));
+        if ($slug === '' || str_contains($slug, '/')) continue;
+        $settings = doitrous_seo_get_settings() ?? DOITROUS_SEO_EMPTY_SETTINGS;
+        $lang = (string) ($_GET['lang'] ?? doitrous_seo_site_lang());
+        [$item, $bodyHtml, $jsonld, $routePath] = doitrous_seo_load_v2_content($kind, $settings, $slug, $lang);
+        if (!$item) { status_header(404); header('Content-Type: text/plain; charset=UTF-8'); echo 'not found'; exit; }
+        $seo = doitrous_seo_resolve($routePath, $lang);
+        $seo['jsonld'][] = $jsonld;
+        header('Content-Type: text/html; charset=UTF-8');
+        echo '<html><head>' . doitrous_seo_head_tags($seo) . '</head><body>' . $bodyHtml . '</body></html>';
+        exit;
+    }
+
+    return false;
+}
+
+/** @return array{0: ?array, 1: string, 2: array, 3: string} */
+function doitrous_seo_load_v2_content(string $kind, array $settings, string $slug, string $lang): array {
+    if ($kind === 'author') {
+        $author = doitrous_seo_find_author($settings, $slug);
+        if (!$author) return [null, '', [], ''];
+        $path = "/authors/{$author['slug']}";
+
+        return [$author, doitrous_seo_author_body_html($author), doitrous_seo_person_jsonld($author, doitrous_seo_absolute_url($settings, $lang, $path)), $path];
+    }
+    if ($kind === 'help_entry') {
+        $entry = doitrous_seo_find_help_entry($settings, $slug, $lang);
+        if (!$entry) return [null, '', [], ''];
+        $path = "/help/{$entry['slug']}";
+
+        return [$entry, doitrous_seo_help_body_html($entry), doitrous_seo_help_article_jsonld($entry, doitrous_seo_absolute_url($settings, $lang, $path)), $path];
+    }
+    $tool = doitrous_seo_find_tool($settings, $slug, $lang);
+    if (!$tool) return [null, '', [], ''];
+    $path = "/tools/{$tool['slug']}";
+
+    return [$tool, doitrous_seo_tool_body_html($tool), doitrous_seo_tool_jsonld($tool, doitrous_seo_absolute_url($settings, $lang, $path)), $path];
+}
+
 function doitrous_seo_register_routes(): void {
     $path = doitrous_seo_normalize_path(parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/');
     $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
+    if (doitrous_seo_dispatch_v2_content_route($method, $path)) return;
     $routes = [
         'POST /api/seo/sync' => 'doitrous_seo_route_sync',
         'GET /api/seo/pages' => 'doitrous_seo_route_pages',
         'GET /api/seo/probe' => 'doitrous_seo_route_probe',
         'GET /api/seo/health' => 'doitrous_seo_route_health',
         'POST /api/articles' => 'doitrous_seo_route_articles',
+        // v2: pending/approve proxy — this site's secret in (bearer-authenticated below, like
+        // every other route in this table except the two public ones), the hub's runtime secret
+        // out (doitrous_seo_hub_proxy, in approval.php).
+        'GET /api/seo/pending' => 'doitrous_seo_route_pending',
+        'POST /api/seo/approve' => fn () => doitrous_seo_route_approval_action('approve'),
+        'POST /api/seo/reject' => fn () => doitrous_seo_route_approval_action('reject'),
+        'POST /api/seo/publish-now' => fn () => doitrous_seo_route_approval_action('publish-now'),
+        // v2: IndexNow — this site's own secret in, forwards {urlList} to api.indexnow.org.
+        'POST /api/seo/indexnow' => 'doitrous_seo_route_index_now',
         'GET /sitemap.xml' => 'doitrous_seo_route_sitemap',
         'GET /robots.txt' => 'doitrous_seo_route_robots',
     ];
+    // v2: the opt-in web-vitals beacon — deliberately anonymous (it is posted to by a real
+    // visitor's browser, which is not a place to keep this site's secret) and checked ahead of
+    // the authenticated table above so it is never caught by the "anything else under /api/seo
+    // needs the secret" fallthrough below.
+    if ($method === 'POST' && $path === '/api/seo/vitals') { doitrous_seo_route_vitals(); return; }
     $key = "$method $path";
     if (isset($routes[$key])) {
         // Only the sitemap and robots are public. Health is authenticated: it names the site and

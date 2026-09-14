@@ -32,7 +32,19 @@ class SeoRuntimeServiceProvider extends ServiceProvider
 
         Blade::directive('seoHead', fn ($expression) => "<?php echo \\Doitrous\\SeoRuntime\\Seo::head($expression); ?>");
 
-        // CONTRACT: pull on boot and every 6 h, health hourly. Registered here so a host app only
+        // CONTRACT/ticket: the first pull happens on boot, not by a manual `artisan` command.
+        // Guarded so PHPUnit and `artisan` commands (migrate, tinker, the scheduler itself) never
+        // trigger it, and so it only ever fires once — `snapshot()` is non-null after the first
+        // successful pull, so every boot after that is a single cheap read, not a network call.
+        // `runningInConsole()` is false for `php artisan serve`-served requests (SAPI `cli-server`,
+        // not `cli`), which is exactly the boot this replaces the manual `seo-runtime:pull` for.
+        $this->app->booted(function () {
+            if ($this->app->runningInConsole() || $this->app->runningUnitTests()) return;
+            $manager = $this->app->make(SeoManager::class);
+            if (!$manager->snapshot()) $manager->pull();
+        });
+
+        // CONTRACT: pull every 6 h thereafter, health hourly. Registered here so a host app only
         // needs a running scheduler (`php artisan schedule:work` / the cron entry), no extra code.
         $this->callAfterResolving(Schedule::class, function (Schedule $schedule) {
             $schedule->call(fn () => $this->app->make(SeoManager::class)->pull())->cron('0 */6 * * *')->name('seo-runtime:pull')->withoutOverlapping();

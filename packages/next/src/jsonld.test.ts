@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { ReactElement } from 'react'
-import { SeoJsonLd } from './jsonld.ts'
+import { SeoJsonLd, SeoWebVitals } from './jsonld.ts'
 
 test('SeoJsonLd renders one escaped ld+json script per entry and no wrapper element', () => {
   const el = SeoJsonLd({ seo: { jsonld: [{ '@type': 'Thing', name: '</script><b>' }, { '@type': 'X' }] } as never })
@@ -12,4 +12,11 @@ test('SeoJsonLd renders one escaped ld+json script per entry and no wrapper elem
   assert.equal(props.type, 'application/ld+json')
   assert.doesNotMatch(props.dangerouslySetInnerHTML.__html, /<\/script>/)
   assert.match(props.dangerouslySetInnerHTML.__html, /\\u003c\/script>/)
+})
+
+test("SeoWebVitals posts to this site's own /api/seo/vitals, never a hub URL or a secret", () => {
+  const el = SeoWebVitals()
+  const html = (el.props as { dangerouslySetInnerHTML: { __html: string } }).dangerouslySetInnerHTML.__html
+  assert.match(html, /sendBeacon\('\/api\/seo\/vitals'/)
+  assert.doesNotMatch(html, /https?:\/\//)
 })

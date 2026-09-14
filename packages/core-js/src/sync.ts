@@ -7,8 +7,13 @@ import { sendHealth } from './health.ts'
 
 /** Everything the runtime refuses to render is dropped once, here, rather than at every render. */
 export function sanitizeSnapshot(s: Snapshot): Snapshot {
+  // v2's `entity` is a JSON-LD override just like a page's `structuredData` — same rule, same
+  // drop-unless-schema.org-shaped check (entities.ts's `entityJsonLd` re-checks this at render
+  // time too, so a pre-v2 stored snapshot with no `entity` at all still renders nothing here).
+  const entity = s.settings.entity
+  const settings = entity && !isSchemaOrg(entity) ? { ...s.settings, entity: null } : s.settings
   return {
-    ...s,
+    ...s, settings,
     redirects: s.redirects.filter((r) => safeDestination(r.destination) !== null),
     pages: s.pages.map((p) => ({ ...p, seo: { ...p.seo, structuredData: (p.seo.structuredData ?? []).filter(isSchemaOrg) } })),
   }

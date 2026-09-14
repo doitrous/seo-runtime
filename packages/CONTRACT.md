@@ -101,7 +101,12 @@ session middleware, and are skipped for `/api`, `/admin` and every prefix in
 them into whatever `settings.reservedPrefixes` sends, so a hub-configured empty list can never
 unreserve them.
 
-Destinations must be site-relative (`/path`) or `https://…`; anything else is dropped at sync time.
+Destinations must be site-relative (`/path`) or `https://…`; anything else is dropped at sync
+time (`sanitizeSnapshot`/`Snapshot::sanitize`/`doitrous_seo_sanitize`, per stack). Every stack
+also re-checks this at **render** time, on the read path (core-js's `redirectFor`, called by both
+Express and Next; Laravel's `Snapshot::matchRedirect`; WordPress's `doitrous_seo_apply_redirect`)
+— belt and braces against a stored row that predates sanitization, or one written by a lower-
+level store call that bypassed it.
 
 **Next.js trailing slashes.** Next's own router issues its own 308 to strip a trailing slash
 *before* a proxy/middleware ever runs, which pre-empts the site's real redirect for any source
@@ -161,6 +166,82 @@ answered `500 {error:'article_hook_failed', message}` — never an unhandled cra
 A slug is rejected only when it is empty, longer than 191 characters, or contains whitespace, `/`,
 `?`, `#`, or a `..` segment. It is **not** required to be ASCII kebab-case: the sites serve Arabic
 slugs and the hub has been sending them since spec 1.
+
+## v2 fields (Phase 5, AI readability)
+
+All additive, all optional, all backwards compatible with a phase-1 snapshot. Every one of them
+lives inside `settings` — the one JSON blob every store already persists as a single
+field/option/column — so **no store, migration or WordPress option schema changed** to carry
+them.
+
+| Field | On | Rendered as |
+|---|---|---|
+| `crawlerPolicy {allow: string[], disallow: string[]}` | `settings` | `robots.txt`: one `User-agent: {ua}` block per name in `allow` (`Allow: /`) and per name in `disallow` (`Disallow: /`), after the default `*` block and before `Sitemap:`. A UA name is stripped of `\r`/`\n` first — it is one line and must never inject a second one. |
+| `entity` (a JSON-LD object) | `settings` | An extra `jsonld` entry on **every** resolved page (no route awareness in `resolveSeo`/`composeSeo` — this is the ticket's own fallback for a package with none, and it also covers `/` and `/about` because it covers every path). Dropped unless schema.org-shaped (`@context: https://schema.org` and a string `@type`), same rule as a page's `structuredData` override. |
+| `authors[] {slug, name, title, credentials, sameAs[], bio}` | `settings` | `/authors/{slug}`, a page the runtime renders itself (unlike an article): `<h1>` name, title/credentials/bio, a `sameAs` link list, plus a `Person` JSON-LD block. 404 for an unknown slug. |
+| `helpEntries[] {slug, lang, question, answerHtml, moneyPageUrl, updatedAt}` | `settings` | `/help/{slug}` (matched by `slug` **and** `lang`, `lang` from `?lang=`, default the site's first supported language): the question as `<h1>`, `answerHtml` (pre-rendered, trusted HTML from the hub — rendered as-is, like an article's `bodyHtml`) first, a link to `moneyPageUrl`, and an `Article` JSON-LD block with `headline` = the question and `dateModified` = `updatedAt`. |
+| `tools[] {slug, lang, kind, config, methodologyHtml, dataSource, asOf}` | `settings` | `/tools/{slug}` (matched by `slug` and `lang` the same way): a placeholder container (`<div id="seo-tool-{slug}" data-kind data-config>`) the interactive kit mounts into at runtime, the `methodologyHtml` block, a `dataSource`/`asOf` line, and a `WebApplication` JSON-LD block. |
+| `verification {googleMeta?, bingMeta?}` | `settings` | `<meta name="google-site-verification" content="{googleMeta}">` / `<meta name="msvalidate.01" content="{bingMeta}">` in the head, alongside every other head tag. |
+| `indexNowKey` | `settings` | `GET /{key}.txt` → `200 text/plain`, body = the key, exactly. Every other path is untouched — this is a check against the one exact expected path, never a route/pattern broad enough to shadow a host's own top-level `*.txt` handling. |
+| `ga4MeasurementId?` | `settings` | The gtag.js snippet (`<script async src="…/gtag/js?id={id}">` + the inline `gtag('config', …)` call), only when set. The id is checked against `^[A-Za-z0-9_-]+$` and dropped (not escaped) when it fails — it sits inside a JS string literal, not an HTML attribute. |
+
+`resolveSeo`'s returned shape gains two more optional keys, `verification` and
+`ga4MeasurementId`, copied straight from `settings` — every stack's head-tag renderer needs them
+and this is one fetch instead of a second one per render.
+
+Author/help/tool pages are the one exception to "no runtime ships a controller that renders an
+article" (Article ingest, above): the ticket asks the runtime to render these three new page
+types itself, not just resolve metadata for them. They are otherwise ordinary anonymous GET
+routes, same risk profile as `/sitemap.xml` and `/robots.txt` — a specific literal prefix, never a
+generic catch-all.
+
+## Pending/approve proxy (Phase 5)
+
+Every stack proxies the hub's site-side approval API (`packages/CONTRACT.md` of `seohub`'s Phase
+1: `GET /api/sites/:slug/pending`, `POST /api/sites/:slug/jobs/:id/approve|reject|publish-now`)
+behind its own runtime secret:
+
+| Route | Proxies | Auth in | Auth out |
+|---|---|---|---|
+| `GET /api/seo/pending` | `GET {hub}/api/sites/{slug}/pending` | this site's `SEO_HUB_SECRET` (Bearer) | the same secret, as the hub's runtime Bearer |
+| `POST /api/seo/approve` | `POST {hub}/.../jobs/{id}/approve` | ditto | ditto |
+| `POST /api/seo/reject` | `POST {hub}/.../jobs/{id}/reject` | ditto | ditto |
+| `POST /api/seo/publish-now` | `POST {hub}/.../jobs/{id}/publish-now` | ditto | ditto |
+
+Body `{jobId, approvedBy, note?}` in (`jobId` addresses the hub's `:id`; `approvedBy`/`note` pass
+straight through to the hub's `{approvedBy, note?}`); the hub's status and body are passed through
+verbatim, including a `409 {error:'publish_blocked', reason}` block. A minimal admin panel per
+stack (Next `SeoApprovalPanel`, Express `GET /seo-admin`, Laravel a blade view + route, WordPress
+an admin submenu page) lists pending jobs with Preview/Approve/Reject/Publish-now buttons and an
+approver-name input, authenticated the same way the runtime secret protects everything else.
+
+## IndexNow submission and the web-vitals beacon (Phase 5)
+
+| Route | Auth | Forwards to | Body |
+|---|---|---|---|
+| `POST /api/seo/indexnow` | this site's `SEO_HUB_SECRET` (Bearer) | `https://api.indexnow.org/indexnow` | in: `{urlList}`; out: `{host, key, keyLocation, urlList}` with `settings.indexNowKey` as `key` — the same key served at `GET /{key}.txt` above, which is what lets IndexNow's own key check succeed |
+| `POST /api/seo/vitals` | **none** — see below | `{hub}/api/runtime/vitals` | in: `{url, lcp?, inp?, cls?}`; out: the same plus `{siteSlug, source:'rum'}`, with this site's `SEO_HUB_SECRET` as the hub's runtime Bearer |
+
+**IndexNow.** Every URL in one `urlList` must share the batch's own host (IndexNow's own rule); a
+URL for a different host is dropped rather than sent, since IndexNow rejects the *whole* batch on
+a host mismatch, not just that one URL. The hub is expected to call this route after it publishes
+— a runtime never calls IndexNow directly on its own, and the hub never gets a second, unproxied
+path to a site's IndexNow key.
+
+**The web-vitals beacon** is opt-in at the integration level, not gated by a snapshot field: each
+core package exports a `webVitalsSnippet()` a site includes itself (Express/Next/Laravel/
+WordPress all name it the same way in their own language) wherever it wants a beacon, the same
+way `SeoGtag`/`gtagSnippet` is an explicit component rather than something baked into every head.
+It is never auto-included by `injectHead`/`headTags`, unlike the gtag snippet.
+
+The beacon's own route (`POST /api/seo/vitals`) takes **no secret from the caller** — it runs in a
+real visitor's browser, which is not a place to keep this site's secret, so the route is
+deliberately outside every stack's normal `seo.secret`/`authorized`/bearer-check path. The site's
+secret is attached only on the way *out*, to the hub, from server-side code — the same pattern as
+every hub-proxy route above, just with the auth direction reversed on the way in. Metrics are
+read straight off the browser's own `PerformanceObserver` (`largest-contentful-paint`,
+`layout-shift`, and a best-effort `event` for INP) — no `web-vitals` npm/composer dependency,
+since that library itself is a thin wrapper over the same three observer types.
 
 ## Versioning
 

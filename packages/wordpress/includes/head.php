@@ -47,12 +47,14 @@ function doitrous_seo_head_tags(array $seo): string {
     $out .= $meta('twitter:card', $seo['twitter']['image'] !== '' ? 'summary_large_image' : 'summary');
     $out .= $meta('twitter:title', $seo['twitter']['title']) . $meta('twitter:description', $seo['twitter']['description']);
     $out .= $meta('twitter:image', $seo['twitter']['image']);
+    $out .= doitrous_seo_verification_meta_tags($seo['verification'] ?? null);
     foreach ($seo['jsonld'] as $entry) {
         // '<' -> the six-character escape, so a literal "</script>" inside a value cannot close
         // the tag. Replacing '<' with a plain '<' (what a collapsed escape looks like) is a no-op.
         $json = str_replace('<', '\u003c', wp_json_encode($entry, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
         $out .= '<script type="application/ld+json">' . $json . "</script>\n";
     }
+    $out .= doitrous_seo_gtag_snippet($seo['ga4MeasurementId'] ?? null);
 
     return $out;
 }

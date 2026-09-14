@@ -118,6 +118,12 @@ class Sitemap
         return self::urlset($entries);
     }
 
+    /** No CR/LF: a UA name is one robots.txt line and must never be able to inject a second one. */
+    private static function safeUa(string $ua): string
+    {
+        return str_replace(["\r", "\n"], '', trim($ua));
+    }
+
     public static function robots(?array $snapshot): string
     {
         if (!$snapshot) return "User-agent: *\nAllow: /\n";
@@ -126,6 +132,15 @@ class Sitemap
         $urls = $s['baseUrls'] ?? [];
         $base = rtrim(reset($urls) ?: '', '/');
         $lines = array_merge(['User-agent: *', 'Allow: /'], array_filter($s['robotsExtra'] ?? []));
+        // v2: per-UA blocks for named crawlers (GPTBot, ClaudeBot, …).
+        foreach ($s['crawlerPolicy']['allow'] ?? [] as $ua) {
+            $u = self::safeUa($ua);
+            if ($u !== '') $lines = array_merge($lines, ['', "User-agent: $u", 'Allow: /']);
+        }
+        foreach ($s['crawlerPolicy']['disallow'] ?? [] as $ua) {
+            $u = self::safeUa($ua);
+            if ($u !== '') $lines = array_merge($lines, ['', "User-agent: $u", 'Disallow: /']);
+        }
         if ($base !== '') $lines = array_merge($lines, ['', "Sitemap: $base/sitemap.xml"]);
 
         return implode("\n", $lines) . "\n";

@@ -115,6 +115,13 @@ test('invalid JSON-LD overrides are dropped at sync time', () => {
   assert.equal(s.pages[0].seo.structuredData.length, 1)
 })
 
+test('an invalid v2 entity override is dropped at sync time, a valid one is kept', () => {
+  const bad = sanitizeSnapshot(snap({ settings: { ...EMPTY_SETTINGS, entity: { name: 'no context' } } }))
+  assert.equal(bad.settings.entity, null)
+  const good = sanitizeSnapshot(snap({ settings: { ...EMPTY_SETTINGS, entity: { '@context': 'https://schema.org', '@type': 'MedicalOrganization' } } }))
+  assert.equal(good.settings.entity?.['@type'], 'MedicalOrganization')
+})
+
 test('the health payload carries version, counts and the hit deltas, and does NOT reset them', async () => {
   const { store, cleanup } = tmpStore()
   await applySnapshot(store, snap({ redirects: [{ source: '/a', destination: '/b', type: 301, active: true }] }))

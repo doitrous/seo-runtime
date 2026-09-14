@@ -77,6 +77,10 @@ function doitrous_seo_sanitize(array $s): array {
 
         return $p;
     }, $s['pages']);
+    // v2's `entity` is a JSON-LD override, same rule as a page's structuredData.
+    if (isset($s['settings']['entity']) && !doitrous_seo_is_schema_org($s['settings']['entity'])) {
+        $s['settings']['entity'] = null;
+    }
 
     return $s;
 }
@@ -162,6 +166,12 @@ function doitrous_seo_compose(?array $page, array $settings, string $path, strin
         'inLanguage' => $lang, 'dateModified' => $page['updatedAt'],
     ], fn ($v) => $v !== null)] : $override;
     $org = doitrous_seo_organization_jsonld($s);
+    // v2: the site-wide `entity` block, on every path — this port has no route awareness
+    // either, which is exactly the ticket's own fallback for a package with none.
+    $entity = (isset($s['entity']) && doitrous_seo_is_schema_org($s['entity'])) ? $s['entity'] : null;
+    $jsonld = $generated;
+    if ($org) $jsonld[] = $org;
+    if ($entity) $jsonld[] = $entity;
 
     return [
         'title' => $title, 'description' => $description, 'canonical' => $canonical,
@@ -169,8 +179,9 @@ function doitrous_seo_compose(?array $page, array $settings, string $path, strin
             'index' => ($seo['index'] ?? true) && ($s['indexingEnabled'] ?? true),
             'follow' => $seo['follow'] ?? true,
         ],
-        'alternates' => $alternates, 'og' => $og, 'twitter' => $twitter,
-        'jsonld' => $org ? array_merge($generated, [$org]) : $generated,
+        'alternates' => $alternates, 'og' => $og, 'twitter' => $twitter, 'jsonld' => $jsonld,
+        // v2, carried straight from settings so head.php has it without a second fetch.
+        'verification' => $s['verification'] ?? null, 'ga4MeasurementId' => $s['ga4MeasurementId'] ?? null,
     ];
 }
 

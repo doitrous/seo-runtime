@@ -13,7 +13,22 @@ Route::middleware(['seo.secret', 'seo.body'])->group(function () {   // auth fir
     Route::get('/api/seo/probe', [SeoController::class, 'probe']);
     Route::get('/api/seo/health', [SeoController::class, 'health']);
     Route::post('/api/articles', [ArticleController::class, 'upsert']);
+    // v2: pending/approve proxy — this site's secret in (the group's own middleware), the hub's
+    // runtime secret out.
+    Route::get('/api/seo/pending', [SeoController::class, 'pending']);
+    Route::post('/api/seo/approve', [SeoController::class, 'approve']);
+    Route::post('/api/seo/reject', [SeoController::class, 'reject']);
+    Route::post('/api/seo/publish-now', [SeoController::class, 'publishNow']);
+    // v2: IndexNow — this site's own secret in (the group's own middleware), forwards
+    // {urlList} to api.indexnow.org with the site's own key.
+    Route::post('/api/seo/indexnow', [SeoController::class, 'indexNow']);
 });
+
+// v2: the opt-in web-vitals beacon — deliberately OUTSIDE the seo.secret group above: it is
+// posted to by a real visitor's browser, which is not a place to keep this site's secret. Still
+// behind the same body-size limit as every other POST route, and registered ahead of the
+// catch-all below so it is never shadowed by the generic "not found" answer.
+Route::post('/api/seo/vitals', [SeoController::class, 'vitals'])->middleware('seo.body');
 
 // Anything else under /api/seo is authenticated before it is a 404 (matches the Express and Next
 // packages): the prefix never confirms which routes exist to an anonymous caller.
@@ -25,3 +40,14 @@ Route::middleware('seo.secret')->any('/api/seo/{any}', fn () => response()->json
 // app that already defines /sitemap.xml or /robots.txt of its own must remove them.
 Route::get('/sitemap.xml', [SeoController::class, 'sitemap']);
 Route::get('/robots.txt', [SeoController::class, 'robots']);
+
+// v2: the minimal admin panel — its own auth (query string OR header), not the seo.secret
+// middleware, which only ever reads the Bearer header. See SeoController::admin's own docblock.
+Route::get('/seo-admin', [SeoController::class, 'admin']);
+
+// v2 content pages, rendered by the package itself (unlike an article: these are new page types
+// the ticket asks the runtime to render, not just resolve metadata for). Specific literal
+// prefixes, same risk profile as /sitemap.xml and /robots.txt above — never a generic catch-all.
+Route::get('/authors/{slug}', [SeoController::class, 'author']);
+Route::get('/help/{slug}', [SeoController::class, 'help']);
+Route::get('/tools/{slug}', [SeoController::class, 'tool']);

@@ -7,7 +7,7 @@ import { handleSeoGet, handleSeoPost, MAX_BODY_BYTES, type SeoConfig } from './h
 
 export type { SeoConfig, ProviderPage } from './handlers.ts'
 export { MAX_BODY_BYTES }
-export { SeoJsonLd } from './jsonld.ts'
+export { SeoGtag, SeoJsonLd, SeoWebVitals } from './jsonld.ts'
 export { withSeoRedirects } from './redirects.ts'
 
 // Derived, never hand-written — a hand-written copy goes stale the moment createSeo grows a
@@ -21,12 +21,19 @@ export function createSeo(config: SeoConfig) {
 
   const metadata = async ({ path, lang }: { path: string; lang: string }): Promise<Metadata> => {
     const seo = await resolve(path, lang)
+    const v = seo.verification
     return {
       title: seo.title, description: seo.description,
       alternates: { canonical: seo.canonical, languages: seo.alternates },
       robots: { index: seo.robots.index, follow: seo.robots.follow, googleBot: { index: seo.robots.index, follow: seo.robots.follow } },
       openGraph: { title: seo.og.title, description: seo.og.description, url: seo.canonical, images: seo.og.image ? [seo.og.image] : [] },
       twitter: { card: seo.twitter.image ? 'summary_large_image' : 'summary', title: seo.twitter.title, description: seo.twitter.description, images: seo.twitter.image ? [seo.twitter.image] : [] },
+      // v2: googleMeta maps to Next's own `verification.google` shorthand; bingMeta has none, so
+      // it goes through `verification.other`, the escape hatch Next's Metadata API ships for
+      // exactly this (msvalidate.01 isn't a name Next knows about).
+      ...(v?.googleMeta || v?.bingMeta
+        ? { verification: { ...(v.googleMeta ? { google: v.googleMeta } : {}), ...(v.bingMeta ? { other: { 'msvalidate.01': v.bingMeta } } : {}) } }
+        : {}),
     }
   }
 
