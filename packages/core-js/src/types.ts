@@ -7,6 +7,25 @@ export type Organization = {
 
 export type PageTypeDefaults = { titleTemplate: string; schemaType: string; changefreq: string; priority: number }
 
+/** UA names, not booleans: each one gets its own `User-agent:` block in robots.txt. */
+export type CrawlerPolicy = { allow: string[]; disallow: string[] }
+
+export type Author = { slug: string; name: string; title: string; credentials: string; sameAs: string[]; bio: string }
+
+/** `answerHtml` is pre-rendered, trusted HTML from the hub — rendered as-is, like an article's `bodyHtml`. */
+export type HelpEntry = { slug: string; lang: string; question: string; answerHtml: string; moneyPageUrl: string; updatedAt: string }
+
+/** The interactive kit ships separately; the runtime renders a placeholder container plus the methodology block. */
+export type Tool = { slug: string; lang: string; kind: string; config: Record<string, unknown>; methodologyHtml: string; dataSource: string; asOf: string }
+
+export type Verification = { googleMeta?: string; bingMeta?: string }
+
+/**
+ * v2 fields (Phase 5). All optional and all live inside `settings` — the one JSON blob every
+ * store already persists as a single field/option/column — so no store, migration or WordPress
+ * option schema needed a change to carry them. `sanitizeSnapshot` (sync.ts) is what validates
+ * `entity` before it is ever rendered.
+ */
 export type Settings = {
   baseUrls: Record<string, string>
   indexingEnabled: boolean
@@ -17,6 +36,16 @@ export type Settings = {
   pageDefaults: Record<string, PageTypeDefaults>
   reservedPrefixes: string[]
   twitterHandle: string
+  crawlerPolicy?: CrawlerPolicy
+  /** A JSON-LD object rendered on `/` and `/about` (or every page with no route awareness). Dropped unless schema.org-shaped. */
+  entity?: Record<string, unknown> | null
+  authors?: Author[]
+  helpEntries?: HelpEntry[]
+  tools?: Tool[]
+  verification?: Verification
+  /** Serves `/{key}.txt` with the key as the body. */
+  indexNowKey?: string
+  ga4MeasurementId?: string
 }
 
 export type PageSeo = {
@@ -82,6 +111,9 @@ export type ResolvedSeo = {
   alternates: Record<string, string>
   og: Meta; twitter: Meta
   jsonld: Record<string, unknown>[]
+  /** v2, carried straight from settings so every stack's head-tag renderer has it without a second fetch. */
+  verification?: Verification
+  ga4MeasurementId?: string
 }
 
 export const EMPTY_META: Meta = { title: '', description: '', image: '' }

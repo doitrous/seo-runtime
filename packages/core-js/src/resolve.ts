@@ -78,12 +78,17 @@ export function composeSeo(
       }]
     : override
   const org = organizationJsonLd(s)
-  const jsonld = [...generated, ...(org ? [org] : [])] as Record<string, unknown>[]
+  // v2: the site-wide `entity` block. No per-route awareness here (composeSeo/resolveSeo answer
+  // every path alike), which is exactly the ticket's own fallback for a package with none — it
+  // still covers "/" and "/about" because it covers every path.
+  const entity = s.entity && isSchemaOrg(s.entity) ? s.entity : null
+  const jsonld = [...generated, ...(org ? [org] : []), ...(entity ? [entity] : [])] as Record<string, unknown>[]
 
   return {
     title, description, canonical,
     robots: { index: (seo?.index ?? true) && s.indexingEnabled, follow: seo?.follow ?? true },
     alternates, og, twitter, jsonld,
+    verification: s.verification, ga4MeasurementId: s.ga4MeasurementId,
   }
 }
 
