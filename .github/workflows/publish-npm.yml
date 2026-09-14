@@ -23,6 +23,8 @@ jobs:
             const tag = (process.env.GITHUB_REF_NAME || '').replace(/^v/, '');
             const pkgs = ['packages/core-js/package.json', 'packages/next/package.json', 'packages/express/package.json'];
             const mismatched = pkgs.filter((p) => JSON.parse(fs.readFileSync(p, 'utf8')).version !== tag);
+            const src = fs.readFileSync('packages/core-js/src/index.ts', 'utf8');
+            if (!src.includes("RUNTIME_VERSION = '" + tag + "'")) mismatched.push('packages/core-js/src/index.ts (RUNTIME_VERSION)');
             if (mismatched.length) {
               console.error('Tag v' + tag + ' does not match the version field in: ' + mismatched.join(', '));
               process.exit(1);
