@@ -187,7 +187,10 @@ them.
 
 `resolveSeo`'s returned shape gains two more optional keys, `verification` and
 `ga4MeasurementId`, copied straight from `settings` — every stack's head-tag renderer needs them
-and this is one fetch instead of a second one per render.
+and this is one fetch instead of a second one per render. Laravel renders all of the above —
+verification metas, the JSON-LD blocks, and the GA4 snippet — through `Seo::head()`/the `@seoHead`
+Blade directive (`packages/laravel/resources/views/head.blade.php`), the same one call a host app
+pastes into `<head>` for the rest of this table's page-level metadata too.
 
 Author/help/tool pages are the one exception to "no runtime ships a controller that renders an
 article" (Article ingest, above): the ticket asks the runtime to render these three new page
