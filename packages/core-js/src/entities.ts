@@ -2,6 +2,7 @@ import type { Author, HelpEntry, Settings, Tool, Verification } from './types.ts
 import { normalizePath } from './types.ts'
 import { isSchemaOrg } from './resolve.ts'
 import { xmlEscape } from './sitemap.ts'
+import { jsonLdScript } from './markdown.ts'
 
 // No node: imports here — this module is re-exported from both the full barrel (index.ts) and
 // the edge barrel (edge.ts), same as resolve.ts/redirects.ts/sitemap.ts/robots.ts.
@@ -181,6 +182,95 @@ export function indexNowKeyFile(settings: Settings, path: string): string | null
  * library itself wraps for these three entry types, and each observe() call is its own try/catch
  * so a browser missing one entry type (Safari has no `event` timing yet) still reports the rest.
  */
+/**
+ * `/help` index (06-help-page.md): every entry for `lang`, a client-side filter box, and a
+ * FAQPage block for the first 10 questions. `HelpEntry` carries no topic field (that stays hub
+ * side, per the ticket), so "grouped" here is one flat, filterable list rather than the topic
+ * buckets the doc sketches.
+ * ponytail: flat list, not grouped by topic — upgrade to real groups (before you book, cost and
+ * payment, travel, aftercare, …) once `HelpEntry` gains a `topic` field on the hub side; render
+ * one `<h2>` heading per distinct topic instead of a single flat `<ul>`.
+ */
+export function helpIndexBodyHtml(settings: Settings, lang: string): string {
+  const e = xmlEscape
+  const entries = (settings.helpEntries ?? []).filter((h) => h.lang === lang)
+  // The slug and lang are hub-supplied strings, not developer-authored config: encodeURIComponent
+  // first so a quote or `?`/`&` in either can never break out of the href it lands in, then
+  // xmlEscape as usual for the HTML attribute itself (belt and braces, same split embedSnippet
+  // uses for a tool slug).
+  const list = entries.length
+    ? `<ul class="seo-help-index">${entries.map((h) =>
+        `<li><a href="${e(`/help/${encodeURIComponent(h.slug)}?lang=${encodeURIComponent(lang)}`)}">${e(h.question)}</a></li>`).join('')}</ul>`
+    : '<p>No help entries yet.</p>'
+  const faq = entries.slice(0, 10).map((h) => ({
+    '@type': 'Question', name: h.question, acceptedAnswer: { '@type': 'Answer', text: h.answerHtml },
+  }))
+  const faqJsonLd = faq.length
+    ? jsonLdScript([{ '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: faq }])
+    : ''
+  return '<h1>Help</h1>' +
+    '<input type="search" id="seo-help-search" placeholder="Search help" aria-label="Search help">' +
+    list +
+    // Tiny inline filter: hides list items whose text doesn't match, never generates the links.
+    '<script>(function(){var i=document.getElementById("seo-help-search");var items=document.querySelectorAll(".seo-help-index li");' +
+    'if(!i)return;i.addEventListener("input",function(){var q=i.value.toLowerCase();' +
+    'items.forEach(function(li){li.hidden=q!==""&&li.textContent.toLowerCase().indexOf(q)===-1})})})();</script>' +
+    faqJsonLd
+}
+
+/** `/editorial-guidelines` (01-site-setup.md). `editorialGuidelinesHtml` is pre-rendered, trusted HTML from the hub — rendered as-is, like a help entry's `answerHtml`. */
+export function editorialBodyHtml(settings: Settings): string {
+  const html = settings.editorialGuidelinesHtml?.trim()
+  return '<h1>Editorial guidelines</h1>' + (html || '<p>Editorial guidelines are not published yet.</p>')
+}
+
+/**
+ * hreflang for the five locale-free routes this package renders itself (`/help`,
+ * `/help/{slug}`, `/editorial-guidelines`, `/authors/{slug}`, `/tools/{slug}`): matched by
+ * `?lang=`, not a path segment, so `resolveSeo`'s page-group `alternates` — built from stored
+ * `SnapshotPage` rows — are always empty for these paths; there is no page record to group by.
+ * `path` is the bare path with no query. The current language's own URL stays the page's
+ * `canonical` (computed separately by `resolveSeo`); this only supplies the reciprocal set.
+ * Never used on `/tools/{slug}/embed`, which stays canonical-only (`noindex`).
+ */
+export function localeFreeAlternates(supported: string[], path: string): Record<string, string> {
+  const p = normalizePath(path)
+  const out: Record<string, string> = {}
+  for (const lang of supported) out[lang] = `${p}?lang=${encodeURIComponent(lang)}`
+  if (supported.length) out['x-default'] = out[supported[0]]
+  return out
+}
+
+export type ShareLinks = { url: string; title: string }
+
+/**
+ * 01-site-setup.md §5 / packages/CONTRACT.md: server-rendered share links (WhatsApp, X, Facebook,
+ * LinkedIn, copy-link) so the block works with no JS at all; the inline script only upgrades the
+ * "Share" button to `navigator.share()` when the browser has it (mobile), per the ticket's own
+ * working-style note — never the other way round.
+ */
+export function shareBlockHtml({ url, title }: ShareLinks): string {
+  const e = xmlEscape
+  const u = encodeURIComponent(url)
+  const t = encodeURIComponent(title)
+  const links: [string, string][] = [
+    ['WhatsApp', `https://wa.me/?text=${t}%20${u}`],
+    ['X', `https://twitter.com/intent/tweet?text=${t}&url=${u}`],
+    ['Facebook', `https://www.facebook.com/sharer/sharer.php?u=${u}`],
+    ['LinkedIn', `https://www.linkedin.com/sharing/share-offsite/?url=${u}`],
+  ]
+  const anchors = links.map(([label, href]) => `<a href="${href}" rel="noopener" target="_blank">${e(label)}</a>`).join('')
+  return `<div class="seo-share">` +
+    `<button type="button" id="seo-share-native" hidden data-url="${e(url)}" data-title="${e(title)}">Share</button>` +
+    anchors +
+    `<button type="button" data-share-copy="${e(url)}">Copy link</button>` +
+    `</div>` +
+    '<script>(function(){var n=document.getElementById("seo-share-native");' +
+    'if(navigator.share&&n){n.hidden=false;n.addEventListener("click",function(){navigator.share({title:n.dataset.title,url:n.dataset.url}).catch(function(){})})}' +
+    'document.querySelectorAll("[data-share-copy]").forEach(function(b){b.addEventListener("click",function(){' +
+    'navigator.clipboard&&navigator.clipboard.writeText(b.dataset.shareCopy).catch(function(){})})})})();</script>'
+}
+
 export function webVitalsSnippet(): string {
   return '<script>(function(){try{' +
     "var m={lcp:0,inp:0,cls:0};" +

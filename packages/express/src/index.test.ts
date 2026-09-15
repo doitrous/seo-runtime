@@ -233,6 +233,59 @@ test('v2: a help page puts the question in an h1 with an Article JSON-LD carryin
   assert.match(html, /"dateModified":"2026-09-01T00:00:00.000Z"/)
 })
 
+test('v2: the help index lists this language\'s entries and 200s even with none, and the help/tool/author bodies carry a share block', async (t) => {
+  const { url } = await boot(t)
+  const empty = await (await fetch(`${url}/help`)).text()
+  assert.equal((await fetch(`${url}/help`)).status, 200)
+  assert.match(empty, /No help entries yet/)
+
+  const withEverything: Snapshot = {
+    ...snapshot,
+    settings: {
+      ...snapshot.settings,
+      authors: [{ slug: 'jane', name: 'Jane Doe', title: 'Editor', credentials: '', sameAs: [], bio: '' }],
+      helpEntries: [{ slug: 'refund', lang: 'en', question: 'How do refunds work?', answerHtml: '<p>Answer.</p>', moneyPageUrl: '/pricing', updatedAt: '2026-09-01T00:00:00.000Z' }],
+      tools: [{ slug: 'calc', lang: 'en', kind: 'Calculator', config: {}, methodologyHtml: '<p>Method.</p>', dataSource: 'ONS', asOf: '2026-08-01' }],
+    },
+  }
+  await fetch(`${url}/api/seo/sync`, { method: 'POST', headers: { ...authed, 'content-type': 'application/json' }, body: JSON.stringify(withEverything) })
+
+  const index = await (await fetch(`${url}/help`)).text()
+  assert.match(index, /<a href="\/help\/refund\?lang=en">How do refunds work\?<\/a>/)
+  assert.match(index, /seo-share/, 'the index itself carries a share block')
+
+  const helpHtml = await (await fetch(`${url}/help/refund`)).text()
+  const authorHtml = await (await fetch(`${url}/authors/jane`)).text()
+  const toolHtml = await (await fetch(`${url}/tools/calc`)).text()
+  for (const html of [helpHtml, authorHtml, toolHtml]) {
+    assert.match(html, /class="seo-share"/)
+    assert.match(html, /navigator\.share/)
+  }
+})
+
+test('v2: /editorial-guidelines renders the hub HTML with a share block, and a placeholder when unset', async (t) => {
+  const { url } = await boot(t)
+  const empty = await (await fetch(`${url}/editorial-guidelines`)).text()
+  assert.equal((await fetch(`${url}/editorial-guidelines`)).status, 200)
+  assert.match(empty, /not published yet/)
+
+  const withGuidelines: Snapshot = { ...snapshot, settings: { ...snapshot.settings, editorialGuidelinesHtml: '<p>How we write.</p>' } }
+  await fetch(`${url}/api/seo/sync`, { method: 'POST', headers: { ...authed, 'content-type': 'application/json' }, body: JSON.stringify(withGuidelines) })
+  const html = await (await fetch(`${url}/editorial-guidelines`)).text()
+  assert.match(html, /<h1>Editorial guidelines<\/h1><p>How we write\.<\/p>/)
+  assert.match(html, /class="seo-share"/)
+})
+
+test('v2: share:false drops the health flag and the share block from the rendered pages', async (t) => {
+  const { url } = await boot(t, { share: false })
+  const withHelp: Snapshot = { ...snapshot, settings: { ...snapshot.settings, helpEntries: [{ slug: 'refund', lang: 'en', question: 'How do refunds work?', answerHtml: '<p>Answer.</p>', moneyPageUrl: '/pricing', updatedAt: '2026-09-01T00:00:00.000Z' }] } }
+  await fetch(`${url}/api/seo/sync`, { method: 'POST', headers: { ...authed, 'content-type': 'application/json' }, body: JSON.stringify(withHelp) })
+  const health = await (await fetch(`${url}/api/seo/health`, { headers: authed })).json()
+  assert.equal(health.share, false)
+  const html = await (await fetch(`${url}/help/refund`)).text()
+  assert.doesNotMatch(html, /seo-share/)
+})
+
 test('v2: a tool page renders the placeholder container with a WebApplication JSON-LD', async (t) => {
   const { url } = await boot(t)
   const withTool: Snapshot = { ...snapshot, settings: { ...snapshot.settings, tools: [{ slug: 'calc', lang: 'en', kind: 'Calculator', config: {}, methodologyHtml: '<p>Method.</p>', dataSource: 'ONS', asOf: '2026-08-01' }] } }
@@ -265,6 +318,33 @@ test('v2: the tool embed route answers 200 with noindex,follow and the canonical
   assert.match(html, /id="seo-tool-calc"/)
   assert.match(html, /target="_top"/)
   assert.equal((await fetch(`${url}/tools/nope/embed`)).status, 404)
+})
+
+// V2-PHASE-8: the five locale-free routes have no stored page record for resolveSeo to group
+// alternates from, so localeFreeAlternates supplies them synthetically off opts.supported. The
+// embed route is excluded on purpose (CONTRACT.md) and must keep printing none.
+test('v2: /help, /help/:slug, /editorial-guidelines, /authors/:slug and /tools/:slug carry hreflang for every supported language, but /tools/:slug/embed carries none', async (t) => {
+  const { url } = await boot(t)
+  const withEverything: Snapshot = {
+    ...snapshot,
+    settings: {
+      ...snapshot.settings,
+      authors: [{ slug: 'jane', name: 'Jane Doe', title: 'Editor', credentials: '', sameAs: [], bio: '' }],
+      helpEntries: [{ slug: 'refund', lang: 'en', question: 'How do refunds work?', answerHtml: '<p>Answer.</p>', moneyPageUrl: '/pricing', updatedAt: '2026-09-01T00:00:00.000Z' }],
+      tools: [{ slug: 'calc', lang: 'en', kind: 'Calculator', config: {}, methodologyHtml: '<p>Method.</p>', dataSource: 'ONS', asOf: '2026-08-01' }],
+    },
+  }
+  await fetch(`${url}/api/seo/sync`, { method: 'POST', headers: { ...authed, 'content-type': 'application/json' }, body: JSON.stringify(withEverything) })
+
+  for (const path of ['/help', '/help/refund', '/editorial-guidelines', '/authors/jane', '/tools/calc']) {
+    const html = await (await fetch(`${url}${path}`)).text()
+    assert.match(html, new RegExp(`<link rel="alternate" hreflang="en" href="${path}\\?lang=en">`), `hreflang en on ${path}`)
+    assert.match(html, new RegExp(`<link rel="alternate" hreflang="ar" href="${path}\\?lang=ar">`), `hreflang ar on ${path}`)
+    assert.match(html, new RegExp(`<link rel="alternate" hreflang="x-default" href="${path}\\?lang=en">`), `x-default on ${path}`)
+  }
+
+  const embed = await (await fetch(`${url}/tools/calc/embed`)).text()
+  assert.doesNotMatch(embed, /hreflang=/)
 })
 
 // The mocked fetch below must discriminate by URL: the outer test request to the local test

@@ -18,6 +18,11 @@ export type SeoConfig = {
   /** Where this site serves an article. Defaults to /{lang}/blog/{slug}; three of four sites differ. */
   articlePath?: ArticlePath
   version?: string
+  /** Reported on the health ping. Next never renders the share block itself (a site includes
+   * `<ShareBlock/>` where it wants one, same as `<SeoJsonLd/>`) — this package has no way to
+   * verify it's actually wired in, unlike Express/Laravel, which append the block themselves.
+   * Defaults to `false`; pass `share: true` once `<ShareBlock/>` is in place to opt in. */
+  share?: boolean
 }
 
 // The Fetch spec forbids a body on these three statuses — the WebIDL Response constructor
@@ -82,7 +87,7 @@ export async function handleSeoGet(config: SeoConfig, req: Request, route: strin
   // redirect source path. It has no side effect — the counters are drained by `sendHealth`,
   // after the hub answers 2xx.
   if (!authorized(req)) return unauthorized()
-  if (route === 'health') return json(await healthPayload(config.store, version, readConfig().slug))
+  if (route === 'health') return json(await healthPayload(config.store, version, readConfig().slug, config.share === true))
   if (route === 'pages') {
     return json({ pages: [...await config.pages(), ...await articlePages(config.store, config.articlePath ?? DEFAULT_ARTICLE_PATH)] })
   }

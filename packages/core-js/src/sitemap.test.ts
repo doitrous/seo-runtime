@@ -41,6 +41,19 @@ test('alternates come from the page group and include x-default', () => {
   })
 })
 
+// V2-PHASE-8 (12-international-seo.md): a region-coded hreflang alias ("ar-SA") the hub adds
+// next to the plain "ar" code, for the same path, must reach the XML unfiltered — sitemapEntries
+// builds `alternates` straight off each group member's own `lang`, with no allowlist anywhere in
+// between, so a region-coded group member already prints as-is; this pins that down in the
+// actual rendered XML (resolve.test.ts already covers the same passthrough in composeSeo).
+test('a region-coded hreflang group member ("ar-SA") is emitted in the sitemap XML as hreflang="ar-SA"', () => {
+  const s = snap({ pages: [page(), page({ lang: 'ar', path: '/ar/doctors/anna' }), page({ lang: 'ar-SA', path: '/ar/doctors/anna' })] })
+  const [en] = sitemapEntries(s, [])
+  assert.equal(en.alternates['ar-SA'], 'https://x.com/ar/doctors/anna')
+  const xml = sitemapXml([en])
+  assert.match(xml, /hreflang="ar-SA" href="https:\/\/x\.com\/ar\/doctors\/anna"/)
+})
+
 test('articles are listed per stored language, grouped by external id', () => {
   const entries = sitemapEntries(snap({ pages: [] }), [article(), article({ lang: 'ar', slug: 'hair-ar' })])
   assert.deepEqual(entries.map((e) => e.loc), ['https://x.com/en/blog/hair', 'https://x.com/ar/blog/hair-ar'])

@@ -61,11 +61,28 @@ class SeoController
         return $this->contentPage(Seo::author($slug));
     }
 
+    private function defaultLang(Request $request): string
+    {
+        return (string) $request->query('lang', ((array) config('seo-runtime.supported', ['en']))[0] ?? 'en');
+    }
+
+    /** `/help` index (06-help-page.md). */
+    public function helpIndex(Request $request): Response
+    {
+        return $this->contentPage(Seo::helpIndex($this->defaultLang($request)));
+    }
+
     public function help(Request $request, string $slug): Response
     {
-        $lang = (string) $request->query('lang', ((array) config('seo-runtime.supported', ['en']))[0] ?? 'en');
+        $lang = $this->defaultLang($request);
 
         return $this->contentPage(Seo::helpEntry($slug, $lang));
+    }
+
+    /** `/editorial-guidelines` (01-site-setup.md). */
+    public function editorialGuidelines(Request $request): Response
+    {
+        return $this->contentPage(Seo::editorialGuidelines($this->defaultLang($request)));
     }
 
     public function tool(Request $request, string $slug): Response

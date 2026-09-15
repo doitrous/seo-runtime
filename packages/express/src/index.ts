@@ -1,10 +1,11 @@
 import type { Request, RequestHandler, Response, Router } from 'express'
 import {
-  absoluteUrl, applySnapshot, authorBodyHtml, bearerOf, DEFAULT_ARTICLE_PATH, EMPTY_SETTINGS,
-  findAuthor, findHelpEntry, findTool, healthPayload, helpArticleJsonLd, helpBodyHtml,
-  indexNowKeyFile, ingestArticles, normalizePath, personJsonLd, proxyApprovalAction, proxyPending,
-  readConfig, redirectFor, resolveSeo, robotsTxt, sitemapEntries, sitemapXml, startSync,
-  submitIndexNow, submitVitals, timingSafeSecret, toolBodyHtml, toolEmbedHtml, toolJsonLd,
+  absoluteUrl, applySnapshot, authorBodyHtml, bearerOf, DEFAULT_ARTICLE_PATH, editorialBodyHtml,
+  EMPTY_SETTINGS, findAuthor, findHelpEntry, findTool, healthPayload, helpArticleJsonLd,
+  helpBodyHtml, helpIndexBodyHtml, indexNowKeyFile, ingestArticles, localeFreeAlternates, normalizePath, personJsonLd,
+  proxyApprovalAction, proxyPending, readConfig, redirectFor, resolveSeo, robotsTxt, shareBlockHtml,
+  sitemapEntries, sitemapXml, startSync, submitIndexNow, submitVitals, timingSafeSecret,
+  toolBodyHtml, toolEmbedHtml, toolJsonLd,
   type ApprovalAction, type ArticlePath, type IngestOptions, type ResolvedSeo, type SeoStore,
   type Settings, RUNTIME_VERSION,
 } from '@omary98/seo-runtime-core'
@@ -22,6 +23,9 @@ export type ExpressSeoOptions = {
   /** Where this site serves an article. Defaults to /{lang}/blog/{slug}. */
   articlePath?: ArticlePath
   version?: string
+  /** Appends the share block (entities.ts's `shareBlockHtml`) to the author/help/tool pages this
+   * package renders, and reports it on the health ping. Defaults to true; pass `false` to opt out. */
+  share?: boolean
 }
 
 export const MAX_BODY_BYTES = 2 * 1024 * 1024
@@ -114,6 +118,7 @@ async function articlePages(store: SeoStore, articlePath: ArticlePath): Promise<
 export function seoRuntime(opts: ExpressSeoOptions) {
   const version = opts.version ?? RUNTIME_VERSION
   const articlePath = opts.articlePath ?? DEFAULT_ARTICLE_PATH
+  const shareEnabled = opts.share !== false
 
   const auth: RequestHandler = (req, res, next) => {
     if (!timingSafeSecret(bearerOf(req.headers.authorization), readConfig().secret)) {
@@ -156,7 +161,7 @@ export function seoRuntime(opts: ExpressSeoOptions) {
     // like every other route. It is read-only: it never drains the hit counters itself — only
     // core's `sendHealth` does that, and only after the hub answers 2xx (see `startSync` below).
     app.get('/api/seo/health', auth, async (_req, res) => {
-      res.json(await healthPayload(opts.store, version, readConfig().slug))
+      res.json(await healthPayload(opts.store, version, readConfig().slug, shareEnabled))
     })
 
     app.get('/api/seo/probe', auth, async (req, res) => {
@@ -262,6 +267,14 @@ export function seoRuntime(opts: ExpressSeoOptions) {
       next()
     })
 
+    // Appended to the author/help/tool bodies below when share is enabled (opts.share !== false)
+    // — never to the tool embed, which stays a minimal iframe-able view (packages/CONTRACT.md).
+    const shareFor = (seo: ResolvedSeo, title: string) => shareEnabled ? shareBlockHtml({ url: seo.canonical, title }) : ''
+    // These five routes are matched by `?lang=`, not a path segment, so `resolveSeo`'s page-group
+    // `alternates` are always empty for them — there is no stored page record to group by.
+    // `localeFreeAlternates` fills that in; never applied to `/tools/:slug/embed` (CONTRACT.md).
+    const alternatesFor = (path: string) => localeFreeAlternates(opts.supported ?? ['en'], path)
+
     // v2 content pages, rendered by the package itself (unlike an article: these are new page
     // types the ticket asks the runtime to render, not just resolve metadata for).
     app.get('/authors/:slug', async (req, res) => {
@@ -272,8 +285,21 @@ export function seoRuntime(opts: ExpressSeoOptions) {
       const path = `/authors/${author.slug}`
       const seo = await resolveSeo(opts.store, path, lang)
       const jsonld = [...seo.jsonld, personJsonLd(author, absoluteUrl(settings, lang, path))]
-      const html = await injectHead(`<html><head></head><body></body></html>`, { ...seo, jsonld })
-      res.type('html').send(html.replace('<body></body>', `<body>${authorBodyHtml(author)}</body>`))
+      const html = await injectHead(`<html><head></head><body></body></html>`, { ...seo, jsonld, alternates: alternatesFor(path) })
+      const body = authorBodyHtml(author) + shareFor(seo, author.name)
+      res.type('html').send(html.replace('<body></body>', `<body>${body}</body>`))
+    })
+
+    // `/help` — the index (06-help-page.md): every entry for this language, grouped/filterable,
+    // with a FAQPage block. Registered ahead of `/help/:slug` in source order for readability;
+    // Express matches on path depth, so the order between them makes no difference here.
+    app.get('/help', async (req, res) => {
+      const settings = (await opts.store.getSettings()) ?? EMPTY_SETTINGS
+      const lang = String(req.query.lang ?? opts.supported?.[0] ?? 'en')
+      const seo = await resolveSeo(opts.store, '/help', lang)
+      const html = await injectHead(`<html><head></head><body></body></html>`, { ...seo, alternates: alternatesFor('/help') })
+      const body = helpIndexBodyHtml(settings, lang) + shareFor(seo, 'Help')
+      res.type('html').send(html.replace('<body></body>', `<body>${body}</body>`))
     })
 
     app.get('/help/:slug', async (req, res) => {
@@ -284,8 +310,21 @@ export function seoRuntime(opts: ExpressSeoOptions) {
       const path = `/help/${entry.slug}`
       const seo = await resolveSeo(opts.store, path, lang)
       const jsonld = [...seo.jsonld, helpArticleJsonLd(entry, absoluteUrl(settings, lang, path))]
-      const html = await injectHead(`<html><head></head><body></body></html>`, { ...seo, jsonld })
-      res.type('html').send(html.replace('<body></body>', `<body>${helpBodyHtml(entry)}</body>`))
+      const html = await injectHead(`<html><head></head><body></body></html>`, { ...seo, jsonld, alternates: alternatesFor(path) })
+      const body = helpBodyHtml(entry) + shareFor(seo, entry.question)
+      res.type('html').send(html.replace('<body></body>', `<body>${body}</body>`))
+    })
+
+    // `/editorial-guidelines` (01-site-setup.md): a trust page every site carries, rendered from
+    // the hub's pre-rendered `settings.editorialGuidelinesHtml` the same way a help entry's
+    // `answerHtml` is — trusted HTML, rendered as-is.
+    app.get('/editorial-guidelines', async (req, res) => {
+      const settings = (await opts.store.getSettings()) ?? EMPTY_SETTINGS
+      const lang = String(req.query.lang ?? opts.supported?.[0] ?? 'en')
+      const seo = await resolveSeo(opts.store, '/editorial-guidelines', lang)
+      const html = await injectHead(`<html><head></head><body></body></html>`, { ...seo, alternates: alternatesFor('/editorial-guidelines') })
+      const body = editorialBodyHtml(settings) + shareFor(seo, 'Editorial guidelines')
+      res.type('html').send(html.replace('<body></body>', `<body>${body}</body>`))
     })
 
     app.get('/tools/:slug', async (req, res) => {
@@ -296,9 +335,9 @@ export function seoRuntime(opts: ExpressSeoOptions) {
       const path = `/tools/${tool.slug}`
       const seo = await resolveSeo(opts.store, path, lang)
       const jsonld = [...seo.jsonld, toolJsonLd(tool, absoluteUrl(settings, lang, path))]
-      const html = await injectHead(`<html><head></head><body></body></html>`, { ...seo, jsonld })
+      const html = await injectHead(`<html><head></head><body></body></html>`, { ...seo, jsonld, alternates: alternatesFor(path) })
       const origin = originFor(settings, lang)
-      const body = toolBodyHtml(tool, origin ? { origin, siteName: siteNameOf(settings, origin) } : undefined)
+      const body = toolBodyHtml(tool, origin ? { origin, siteName: siteNameOf(settings, origin) } : undefined) + shareFor(seo, tool.kind)
       res.type('html').send(html.replace('<body></body>', `<body>${body}</body>`))
     })
 
@@ -329,6 +368,6 @@ export function seoRuntime(opts: ExpressSeoOptions) {
       next()
     })
 
-    startSync(opts.store, { version })
+    startSync(opts.store, { version, share: shareEnabled })
   }
 }

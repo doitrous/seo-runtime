@@ -149,6 +149,25 @@ It posts LCP/CLS/best-effort INP to this site's own `POST /api/seo/vitals` — a
 anonymous route (a real visitor's browser is not a place to keep this site's secret) — which
 attaches the secret server-side and relays the sample to the hub.
 
+## Help index, editorial guidelines and the share block
+
+Express and Laravel render two more pages, unconditionally: `GET /help` (an index of
+`settings.helpEntries[]` for the requested language, filterable client-side, with a FAQPage
+block) and `GET /editorial-guidelines` (the hub's pre-rendered `settings.editorialGuidelinesHtml`,
+or a placeholder when unset). Laravel hosts that already have their own route at either path can
+skip registering the package's own by setting `seo-runtime.routes.help` / `.editorial_guidelines`
+to `false` in `config/seo-runtime.php` — see CONTRACT.md for the exact contract. Next doesn't
+render pages itself; it exports `helpIndexBodyHtml`/`editorialBodyHtml` so a site can render its
+own `/help` and `/editorial-guidelines` routes with them, the same way it uses `helpBodyHtml`.
+
+Every author/help/tool page these packages render also gets a server-rendered share block
+(WhatsApp/X/Facebook/LinkedIn/copy-link, `navigator.share` as a progressive upgrade) appended to
+the body. Express and Laravel default this to `true` (`share: false` / `seo-runtime.share =
+false` opts out) since they render the block themselves and can see it's wired in. Next has no
+way to verify a site actually included `<ShareBlock/>`, so its `share` option — reported on the
+health ping only — **defaults to `false`**; pass `share: true` to `createSeo` once `<ShareBlock/>`
+is in place.
+
 ## Embeddable tools
 
 `settings.tools[]` pages (`/tools/{slug}`) render a placeholder container the interactive

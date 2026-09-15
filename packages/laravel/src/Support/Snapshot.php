@@ -302,7 +302,8 @@ class Snapshot
     }
 
     /** healthPayload in health.ts. Read-only: the counters are drained after the hub's 2xx. */
-    public static function health(EloquentStore $store, string $version, string $slug): array
+    /** `$share` mirrors core-js's `healthPayload` default: true unless the integrator opts out. */
+    public static function health(EloquentStore $store, string $version, string $slug, bool $share = true): array
     {
         $snapshot = $store->getSnapshot();
         $hits = $store->peekHits();
@@ -320,6 +321,7 @@ class Snapshot
                 'storeFailures' => self::storeFailures(),
             ],
             'redirectHits' => array_slice($hits, 0, 1000),
+            'share' => $share,
         ];
     }
 

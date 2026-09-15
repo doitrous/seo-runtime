@@ -49,6 +49,19 @@ Route::get('/seo-admin', [SeoController::class, 'admin']);
 // the ticket asks the runtime to render, not just resolve metadata for). Specific literal
 // prefixes, same risk profile as /sitemap.xml and /robots.txt above — never a generic catch-all.
 Route::get('/authors/{slug}', [SeoController::class, 'author']);
+// `seo-runtime.routes.help` / `.editorial_guidelines` (default true): a host app with its own
+// /help or /editorial-guidelines route sets the flag to false, or removes its own route — the
+// same either/or as a host app that already defines /sitemap.xml or /robots.txt above. Gates
+// only the two routes this ticket added; /help/{slug} (v2, phase 5) is unconditional.
+if (config('seo-runtime.routes.help', true)) {
+    // The literal /help index is registered ahead of /help/{slug}: Laravel matches literal
+    // segments before a parameterized one at the same depth regardless of order, but ahead reads
+    // clearest.
+    Route::get('/help', [SeoController::class, 'helpIndex']);
+}
 Route::get('/help/{slug}', [SeoController::class, 'help']);
+if (config('seo-runtime.routes.editorial_guidelines', true)) {
+    Route::get('/editorial-guidelines', [SeoController::class, 'editorialGuidelines']);
+}
 Route::get('/tools/{slug}', [SeoController::class, 'tool']);
 Route::get('/tools/{slug}/embed', [SeoController::class, 'toolEmbed']);

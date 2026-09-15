@@ -17,6 +17,8 @@ use Illuminate\Support\Facades\Facade;
  * @method static array ingest(mixed $payload)
  * @method static array|null author(string $slug)
  * @method static array|null helpEntry(string $slug, string $lang)
+ * @method static array helpIndex(string $lang)
+ * @method static array editorialGuidelines(string $lang)
  * @method static array|null tool(string $slug, string $lang)
  * @method static array|null toolEmbed(string $slug, string $lang)
  * @method static string|null indexNowKeyFile(string $path)

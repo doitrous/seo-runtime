@@ -1,6 +1,6 @@
 import { createElement, Fragment, type ReactElement } from 'react'
 import type { ResolvedSeo } from '@omary98/seo-runtime-core'
-import { gtagSnippet, jsonLdBody, webVitalsSnippet } from '@omary98/seo-runtime-core'
+import { gtagSnippet, jsonLdBody, shareBlockHtml, webVitalsSnippet } from '@omary98/seo-runtime-core'
 
 /**
  * Plain `.ts`, not `.tsx`: `node --test --experimental-strip-types` cannot load a `.tsx` file, and
@@ -33,4 +33,15 @@ export function SeoGtag({ seo }: { seo: ResolvedSeo }): ReactElement | null {
  */
 export function SeoWebVitals(): ReactElement {
   return createElement('span', { dangerouslySetInnerHTML: { __html: webVitalsSnippet() } })
+}
+
+/**
+ * 01-site-setup.md §5 / packages/CONTRACT.md: the share block, server-rendered (WhatsApp, X,
+ * Facebook, LinkedIn, copy-link) so it works with no JS; the block's own inline script only
+ * upgrades to `navigator.share()`. A site includes `<ShareBlock url={...} title={...} />` itself
+ * under its content — Next never inserts it automatically the way Express/Laravel append it to
+ * the pages they render, since Next site-template renders its own pages.
+ */
+export function ShareBlock({ url, title }: { url: string; title: string }): ReactElement {
+  return createElement('div', { dangerouslySetInnerHTML: { __html: shareBlockHtml({ url, title }) } })
 }

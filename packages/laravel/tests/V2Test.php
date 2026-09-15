@@ -62,6 +62,51 @@ class V2Test extends FacadeTestCase
         $this->assertStringContainsString('"dateModified":"2026-09-01T00:00:00.000Z"', $html);
     }
 
+    public function test_the_help_index_lists_this_languages_entries_and_200s_with_none_and_the_help_tool_author_bodies_carry_a_share_block(): void
+    {
+        $empty = $this->get('/help');
+        $empty->assertStatus(200);
+        $this->assertStringContainsString('No help entries yet', $empty->getContent());
+
+        $this->store()->putSnapshot($this->snapshotWith([
+            'authors' => [['slug' => 'jane', 'name' => 'Jane Doe', 'title' => 'Editor', 'credentials' => '', 'sameAs' => [], 'bio' => '']],
+            'helpEntries' => [['slug' => 'refund', 'lang' => 'en', 'question' => 'How do refunds work?', 'answerHtml' => '<p>Answer.</p>', 'moneyPageUrl' => '/pricing', 'updatedAt' => '2026-09-01T00:00:00.000Z']],
+            'tools' => [['slug' => 'calc', 'lang' => 'en', 'kind' => 'Calculator', 'config' => [], 'methodologyHtml' => '<p>Method.</p>', 'dataSource' => 'ONS', 'asOf' => '2026-08-01']],
+        ]));
+        $index = $this->get('/help')->assertStatus(200)->getContent();
+        $this->assertStringContainsString('<a href="/help/refund?lang=en">How do refunds work?</a>', $index);
+        $this->assertStringContainsString('seo-share', $index);
+
+        foreach (['/help/refund', '/authors/jane', '/tools/calc'] as $path) {
+            $html = $this->get($path)->assertStatus(200)->getContent();
+            $this->assertStringContainsString('class="seo-share"', $html);
+            $this->assertStringContainsString('navigator.share', $html);
+        }
+    }
+
+    public function test_editorial_guidelines_renders_the_hub_html_with_a_share_block_and_a_placeholder_when_unset(): void
+    {
+        $empty = $this->get('/editorial-guidelines')->assertStatus(200)->getContent();
+        $this->assertStringContainsString('not published yet', $empty);
+
+        $this->store()->putSnapshot($this->snapshotWith(['editorialGuidelinesHtml' => '<p>How we write.</p>']));
+        $html = $this->get('/editorial-guidelines')->assertStatus(200)->getContent();
+        $this->assertStringContainsString('<h1>Editorial guidelines</h1><p>How we write.</p>', $html);
+        $this->assertStringContainsString('class="seo-share"', $html);
+    }
+
+    public function test_share_false_drops_the_health_flag_and_the_share_block_from_the_rendered_pages(): void
+    {
+        config(['seo-runtime.share' => false]);
+        $this->store()->putSnapshot($this->snapshotWith([
+            'helpEntries' => [['slug' => 'refund', 'lang' => 'en', 'question' => 'How do refunds work?', 'answerHtml' => '<p>Answer.</p>', 'moneyPageUrl' => '/pricing', 'updatedAt' => '2026-09-01T00:00:00.000Z']],
+        ]));
+        $health = $this->withHeader('Authorization', 'Bearer test-secret')->getJson('/api/seo/health');
+        $this->assertFalse($health->json('share'));
+        $html = $this->get('/help/refund')->assertStatus(200)->getContent();
+        $this->assertStringNotContainsString('seo-share', $html);
+    }
+
     public function test_a_tool_page_renders_the_placeholder_container_with_a_web_application_json_ld(): void
     {
         $this->store()->putSnapshot($this->snapshotWith(['tools' => [
@@ -83,6 +128,47 @@ class V2Test extends FacadeTestCase
         $this->assertStringContainsString('rel=&quot;nofollow&quot;&gt;X Co&lt;/a&gt;', $html);
         $this->assertStringContainsString('iframe[src^=&quot;https://x.com/&quot;]', $html);
         $this->assertStringContainsString('<script src="/seo-tools.js" defer></script>', $html);
+    }
+
+    // V2-PHASE-8: these five routes have no stored page record for resolve() to group alternates
+    // from, so SeoManager::alternatesFor supplies them synthetically off config('seo-runtime.supported')
+    // (['en', 'ar'] here, per TestCase::defineEnvironment). The embed route is excluded on purpose
+    // (packages/CONTRACT.md) and must keep printing none.
+    public function test_the_five_locale_free_routes_carry_hreflang_for_every_supported_language_but_the_tool_embed_carries_none(): void
+    {
+        $this->store()->putSnapshot($this->snapshotWith([
+            'authors' => [['slug' => 'jane', 'name' => 'Jane Doe', 'title' => 'Editor', 'credentials' => '', 'sameAs' => [], 'bio' => '']],
+            'helpEntries' => [['slug' => 'refund', 'lang' => 'en', 'question' => 'How do refunds work?', 'answerHtml' => '<p>Answer.</p>', 'moneyPageUrl' => '/pricing', 'updatedAt' => '2026-09-01T00:00:00.000Z']],
+            'tools' => [['slug' => 'calc', 'lang' => 'en', 'kind' => 'Calculator', 'config' => [], 'methodologyHtml' => '<p>Method.</p>', 'dataSource' => 'ONS', 'asOf' => '2026-08-01']],
+        ]));
+
+        foreach (['/help', '/help/refund', '/editorial-guidelines', '/authors/jane', '/tools/calc'] as $path) {
+            $html = $this->get($path)->assertStatus(200)->getContent();
+            $this->assertStringContainsString("<link rel=\"alternate\" hreflang=\"en\" href=\"$path?lang=en\">", $html);
+            $this->assertStringContainsString("<link rel=\"alternate\" hreflang=\"ar\" href=\"$path?lang=ar\">", $html);
+            $this->assertStringContainsString("<link rel=\"alternate\" hreflang=\"x-default\" href=\"$path?lang=en\">", $html);
+        }
+
+        $embed = $this->get('/tools/calc/embed')->assertStatus(200)->getContent();
+        $this->assertStringNotContainsString('hreflang=', $embed);
+    }
+
+    // V2-PHASE-8: hub-supplied slug/question, hostile — helpIndexBodyHtml rawurlencode's the href
+    // segments before Sitemap::xmlEscape's attribute escaping (belt and braces), mirroring
+    // core-js's entities.test.ts XSS case for parity.
+    public function test_help_index_body_html_encodes_a_hostile_slug_and_question_so_neither_breaks_out_of_the_href_or_link_text(): void
+    {
+        $html = \Doitrous\SeoRuntime\Support\Entities::helpIndexBodyHtml([
+            'helpEntries' => [[
+                'slug' => '"><script>alert(1)</script>', 'lang' => 'en',
+                'question' => '</a><script>alert(2)</script>', 'answerHtml' => '', 'moneyPageUrl' => '', 'updatedAt' => '',
+            ]],
+        ], 'en');
+        $this->assertStringNotContainsString('"><script>alert(1)</script>', $html);
+        $this->assertStringNotContainsString('</a><script>alert(2)</script>', $html);
+        $this->assertStringNotContainsString('<script>alert', $html);
+        // rawurlencode (unlike JS's encodeURIComponent) also escapes '(' and ')'.
+        $this->assertStringContainsString('href="/help/%22%3E%3Cscript%3Ealert%281%29%3C%2Fscript%3E?lang=en"', $html);
     }
 
     public function test_embedsnippet_encodes_a_hub_supplied_slug_so_a_quote_in_it_can_never_break_out_of_the_src_href_attribute(): void
