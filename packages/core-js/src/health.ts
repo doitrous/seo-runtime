@@ -9,14 +9,20 @@ export type HealthBody = {
   version: string; siteSlug: string; lastSyncAt: string | null; snapshotVersion: number
   counts: { pages: number; redirects: number; articles: number; storeFailures: number }
   redirectHits: { source: string; hits: number }[]
+  /** True when the share block (entities.ts's `shareBlockHtml`) is wired into this site's content pages. */
+  share: boolean
 }
 
 /**
  * Read-only. It does NOT drain the hit counters — `sendHealth` does that, and only after the hub
  * has answered 2xx, so a ping that never arrives loses nothing. `GET /api/seo/health` therefore
  * has no side effect at all, which is what lets it be a plain authenticated read.
+ *
+ * `share` defaults to true: every package appends the share block to the help/tool/author pages
+ * it renders unless the integrator explicitly opts out (`opts.share === false`), so a caller that
+ * never passes anything here is reporting the common case, not a stretch.
  */
-export async function healthPayload(store: SeoStore, version: string, slug: string): Promise<HealthBody> {
+export async function healthPayload(store: SeoStore, version: string, slug: string, share = true): Promise<HealthBody> {
   const snapshot = await store.getSnapshot()
   const articles = await store.listArticles()
   const hits = await store.peekHits()
@@ -34,6 +40,7 @@ export async function healthPayload(store: SeoStore, version: string, slug: stri
     // (takeHits drains only what was reported).
     redirectHits: hits.filter((h) => Number.isFinite(h.hits) && h.hits > 0)
       .sort((a, b) => b.hits - a.hits).slice(0, MAX_REDIRECT_HITS),
+    share,
   }
 }
 
@@ -42,10 +49,10 @@ export async function healthPayload(store: SeoStore, version: string, slug: stri
  * answers 2xx: draining first would throw the deltas away every time the hub is unreachable,
  * which is exactly when they matter.
  */
-export async function sendHealth(store: SeoStore, version: string, cfg = readConfig()): Promise<boolean> {
+export async function sendHealth(store: SeoStore, version: string, cfg = readConfig(), share = true): Promise<boolean> {
   if (!cfg.hubUrl || !cfg.secret) return false
   try {
-    const body = await healthPayload(store, version, cfg.slug)
+    const body = await healthPayload(store, version, cfg.slug, share)
     if (!body.siteSlug) return false   // nothing to address the hub with yet
     const res = await fetch(`${cfg.hubUrl}/api/runtime/health`, {
       method: 'POST',

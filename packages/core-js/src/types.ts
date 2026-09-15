@@ -20,6 +20,9 @@ export type Tool = { slug: string; lang: string; kind: string; config: Record<st
 
 export type Verification = { googleMeta?: string; bingMeta?: string }
 
+/** A country+language a site serves, for region-coded hreflang and per-market currency (ticket V2-PHASE-8). */
+export type Market = { country: string; lang: string; currency?: string }
+
 /**
  * v2 fields (Phase 5). All optional and all live inside `settings` — the one JSON blob every
  * store already persists as a single field/option/column — so no store, migration or WordPress
@@ -46,6 +49,10 @@ export type Settings = {
   /** Serves `/{key}.txt` with the key as the body. */
   indexNowKey?: string
   ga4MeasurementId?: string
+  /** Country+language markets this site serves (hub `markets[]`, country/lang/currency only — no rules/glossary, those stay hub-side). */
+  markets?: Market[]
+  /** Pre-rendered, trusted HTML from the hub — rendered as-is, like a help entry's `answerHtml`. */
+  editorialGuidelinesHtml?: string
 }
 
 export type PageSeo = {

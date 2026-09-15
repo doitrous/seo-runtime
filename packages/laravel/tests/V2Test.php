@@ -62,6 +62,51 @@ class V2Test extends FacadeTestCase
         $this->assertStringContainsString('"dateModified":"2026-09-01T00:00:00.000Z"', $html);
     }
 
+    public function test_the_help_index_lists_this_languages_entries_and_200s_with_none_and_the_help_tool_author_bodies_carry_a_share_block(): void
+    {
+        $empty = $this->get('/help');
+        $empty->assertStatus(200);
+        $this->assertStringContainsString('No help entries yet', $empty->getContent());
+
+        $this->store()->putSnapshot($this->snapshotWith([
+            'authors' => [['slug' => 'jane', 'name' => 'Jane Doe', 'title' => 'Editor', 'credentials' => '', 'sameAs' => [], 'bio' => '']],
+            'helpEntries' => [['slug' => 'refund', 'lang' => 'en', 'question' => 'How do refunds work?', 'answerHtml' => '<p>Answer.</p>', 'moneyPageUrl' => '/pricing', 'updatedAt' => '2026-09-01T00:00:00.000Z']],
+            'tools' => [['slug' => 'calc', 'lang' => 'en', 'kind' => 'Calculator', 'config' => [], 'methodologyHtml' => '<p>Method.</p>', 'dataSource' => 'ONS', 'asOf' => '2026-08-01']],
+        ]));
+        $index = $this->get('/help')->assertStatus(200)->getContent();
+        $this->assertStringContainsString('<a href="/help/refund?lang=en">How do refunds work?</a>', $index);
+        $this->assertStringContainsString('seo-share', $index);
+
+        foreach (['/help/refund', '/authors/jane', '/tools/calc'] as $path) {
+            $html = $this->get($path)->assertStatus(200)->getContent();
+            $this->assertStringContainsString('class="seo-share"', $html);
+            $this->assertStringContainsString('navigator.share', $html);
+        }
+    }
+
+    public function test_editorial_guidelines_renders_the_hub_html_with_a_share_block_and_a_placeholder_when_unset(): void
+    {
+        $empty = $this->get('/editorial-guidelines')->assertStatus(200)->getContent();
+        $this->assertStringContainsString('not published yet', $empty);
+
+        $this->store()->putSnapshot($this->snapshotWith(['editorialGuidelinesHtml' => '<p>How we write.</p>']));
+        $html = $this->get('/editorial-guidelines')->assertStatus(200)->getContent();
+        $this->assertStringContainsString('<h1>Editorial guidelines</h1><p>How we write.</p>', $html);
+        $this->assertStringContainsString('class="seo-share"', $html);
+    }
+
+    public function test_share_false_drops_the_health_flag_and_the_share_block_from_the_rendered_pages(): void
+    {
+        config(['seo-runtime.share' => false]);
+        $this->store()->putSnapshot($this->snapshotWith([
+            'helpEntries' => [['slug' => 'refund', 'lang' => 'en', 'question' => 'How do refunds work?', 'answerHtml' => '<p>Answer.</p>', 'moneyPageUrl' => '/pricing', 'updatedAt' => '2026-09-01T00:00:00.000Z']],
+        ]));
+        $health = $this->withHeader('Authorization', 'Bearer test-secret')->getJson('/api/seo/health');
+        $this->assertFalse($health->json('share'));
+        $html = $this->get('/help/refund')->assertStatus(200)->getContent();
+        $this->assertStringNotContainsString('seo-share', $html);
+    }
+
     public function test_a_tool_page_renders_the_placeholder_container_with_a_web_application_json_ld(): void
     {
         $this->store()->putSnapshot($this->snapshotWith(['tools' => [

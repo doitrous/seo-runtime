@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
-  authorBodyHtml, embedSnippet, entityJsonLd, findAuthor, findHelpEntry, findTool, gtagSnippet,
-  helpArticleJsonLd, helpBodyHtml, indexNowKeyFile, personJsonLd, toolBodyHtml, toolEmbedHtml,
-  toolJsonLd, verificationMetaTags, webVitalsSnippet,
+  authorBodyHtml, editorialBodyHtml, embedSnippet, entityJsonLd, findAuthor, findHelpEntry,
+  findTool, gtagSnippet, helpArticleJsonLd, helpBodyHtml, helpIndexBodyHtml, indexNowKeyFile,
+  personJsonLd, shareBlockHtml, toolBodyHtml, toolEmbedHtml, toolJsonLd, verificationMetaTags,
+  webVitalsSnippet,
 } from './entities.ts'
 import { EMPTY_SETTINGS } from './types.ts'
 import type { Settings } from './types.ts'
@@ -153,4 +154,42 @@ test('webVitalsSnippet posts to this site\'s own /api/seo/vitals, never a hub UR
   assert.match(html, /^<script>[\s\S]*<\/script>$/)
   assert.match(html, /sendBeacon\('\/api\/seo\/vitals'/)
   assert.doesNotMatch(html, /https?:\/\//, 'the beacon must never point at an absolute/hub URL directly')
+})
+
+// === V2-PHASE-8: help index, editorial guidelines, share block ==============================
+
+test('helpIndexBodyHtml lists this language\'s entries, a search box, and a FAQPage of the first 10', () => {
+  const entries = [helpEntry, { ...helpEntry, slug: 'other', lang: 'ar', question: '?' }]
+  const html = helpIndexBodyHtml({ ...EMPTY_SETTINGS, helpEntries: entries }, 'en')
+  assert.match(html, /<h1>Help<\/h1>/)
+  assert.match(html, /<input type="search" id="seo-help-search"/)
+  assert.match(html, /<a href="\/help\/refund\?lang=en">How do refunds work\?<\/a>/)
+  assert.doesNotMatch(html, /other/, 'the ar entry must not leak into the en index')
+  assert.match(html, /"@type":"FAQPage"/)
+  assert.match(html, /"name":"How do refunds work\?"/)
+})
+
+test('helpIndexBodyHtml renders a placeholder and no FAQPage block when the language has no entries', () => {
+  const html = helpIndexBodyHtml(EMPTY_SETTINGS, 'en')
+  assert.match(html, /No help entries yet/)
+  assert.doesNotMatch(html, /FAQPage/)
+})
+
+test('editorialBodyHtml renders the hub HTML as-is, or a placeholder when unset', () => {
+  const html = editorialBodyHtml({ ...EMPTY_SETTINGS, editorialGuidelinesHtml: '<p>How we write.</p>' })
+  assert.match(html, /<h1>Editorial guidelines<\/h1><p>How we write\.<\/p>/)
+  assert.match(editorialBodyHtml(EMPTY_SETTINGS), /not published yet/)
+})
+
+test('shareBlockHtml server-renders WhatsApp/X/Facebook/LinkedIn/copy links from the canonical URL and title, escaped', () => {
+  const html = shareBlockHtml({ url: 'https://x.com/en/a', title: 'A <b>page</b>' })
+  assert.match(html, /https:\/\/wa\.me\/\?text=/)
+  assert.match(html, /https:\/\/twitter\.com\/intent\/tweet/)
+  assert.match(html, /https:\/\/www\.facebook\.com\/sharer\/sharer\.php\?u=/)
+  assert.match(html, /https:\/\/www\.linkedin\.com\/sharing\/share-offsite/)
+  assert.match(html, /data-share-copy="https:\/\/x\.com\/en\/a"/)
+  assert.doesNotMatch(html, /<b>page<\/b>/)
+  // Server-rendered anchors exist with no JS at all; the script only upgrades to navigator.share.
+  assert.match(html, /<a href="https:\/\/wa\.me[^"]*" rel="noopener" target="_blank">WhatsApp<\/a>/)
+  assert.match(html, /navigator\.share/)
 })

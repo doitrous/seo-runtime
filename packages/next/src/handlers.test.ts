@@ -130,6 +130,14 @@ test('health is authenticated, reports the version and counts, and does not drai
   // Reading it twice reports the same hits: only a 2xx from the hub clears them.
   assert.deepEqual((await (await seo.handlers.GET(get('/api/seo/health'), ctx('health'))).json() as { redirectHits: unknown[] }).redirectHits,
     [{ source: '/old', hits: 1 }])
+  assert.equal(body.share, true)
+  cleanup()
+})
+
+test('health reports share:false only when the integrator explicitly opts out', async () => {
+  const { seo, cleanup } = runtime({ share: false })
+  const res = await seo.handlers.GET(get('/api/seo/health'), ctx('health'))
+  assert.equal((await res.json() as { share: boolean }).share, false)
   cleanup()
 })
 

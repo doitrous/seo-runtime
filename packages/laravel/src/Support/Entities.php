@@ -211,6 +211,76 @@ class Entities
      * dependency: every metric comes straight off `PerformanceObserver`, which is all that
      * library wraps for these three entry types.
      */
+    /**
+     * `/help` index (06-help-page.md): every entry for `$lang`, a client-side filter box, and a
+     * FAQPage block for the first 10 questions. `HelpEntry` carries no topic field (that stays
+     * hub-side, per the ticket), so "grouped" here is one flat, filterable list rather than the
+     * topic buckets the doc sketches — a real grouping needs a hub field to group by.
+     */
+    public static function helpIndexBodyHtml(array $settings, string $lang): string
+    {
+        $e = fn ($s) => Sitemap::xmlEscape((string) $s);
+        $entries = array_values(array_filter($settings['helpEntries'] ?? [], fn ($h) => ($h['lang'] ?? null) === $lang));
+        if ($entries) {
+            $items = implode('', array_map(fn ($h) => '<li><a href="/help/' . $e($h['slug']) . '?lang=' . $e($lang) . '">' . $e($h['question']) . '</a></li>', $entries));
+            $list = '<ul class="seo-help-index">' . $items . '</ul>';
+        } else {
+            $list = '<p>No help entries yet.</p>';
+        }
+        $faq = array_map(fn ($h) => [
+            '@type' => 'Question', 'name' => $h['question'],
+            'acceptedAnswer' => ['@type' => 'Answer', 'text' => $h['answerHtml']],
+        ], array_slice($entries, 0, 10));
+        $faqJsonLd = $faq ? Snapshot::jsonLdScript([[
+            '@context' => 'https://schema.org', '@type' => 'FAQPage', 'mainEntity' => $faq,
+        ]]) : '';
+
+        return '<h1>Help</h1>'
+            . '<input type="search" id="seo-help-search" placeholder="Search help" aria-label="Search help">'
+            . $list
+            . '<script>(function(){var i=document.getElementById("seo-help-search");var items=document.querySelectorAll(".seo-help-index li");'
+            . 'if(!i)return;i.addEventListener("input",function(){var q=i.value.toLowerCase();'
+            . 'items.forEach(function(li){li.hidden=q!==""&&li.textContent.toLowerCase().indexOf(q)===-1})})})();</script>'
+            . $faqJsonLd;
+    }
+
+    /** `/editorial-guidelines` (01-site-setup.md). `editorialGuidelinesHtml` is pre-rendered, trusted HTML from the hub — rendered as-is, like a help entry's `answerHtml`. */
+    public static function editorialBodyHtml(array $settings): string
+    {
+        $html = trim((string) ($settings['editorialGuidelinesHtml'] ?? ''));
+
+        return '<h1>Editorial guidelines</h1>' . ($html !== '' ? $html : '<p>Editorial guidelines are not published yet.</p>');
+    }
+
+    /**
+     * 01-site-setup.md §5 / packages/CONTRACT.md: server-rendered share links (WhatsApp, X,
+     * Facebook, LinkedIn, copy-link) so the block works with no JS at all; the inline script only
+     * upgrades the "Share" button to `navigator.share()` when the browser has it.
+     */
+    public static function shareBlockHtml(string $url, string $title): string
+    {
+        $e = fn ($s) => Sitemap::xmlEscape((string) $s);
+        $u = rawurlencode($url);
+        $t = rawurlencode($title);
+        $links = [
+            ['WhatsApp', "https://wa.me/?text=$t%20$u"],
+            ['X', "https://twitter.com/intent/tweet?text=$t&url=$u"],
+            ['Facebook', "https://www.facebook.com/sharer/sharer.php?u=$u"],
+            ['LinkedIn', "https://www.linkedin.com/sharing/share-offsite/?url=$u"],
+        ];
+        $anchors = implode('', array_map(fn ($l) => '<a href="' . $l[1] . '" rel="noopener" target="_blank">' . $e($l[0]) . '</a>', $links));
+
+        return '<div class="seo-share">'
+            . '<button type="button" id="seo-share-native" hidden data-url="' . $e($url) . '" data-title="' . $e($title) . '">Share</button>'
+            . $anchors
+            . '<button type="button" data-share-copy="' . $e($url) . '">Copy link</button>'
+            . '</div>'
+            . '<script>(function(){var n=document.getElementById("seo-share-native");'
+            . 'if(navigator.share&&n){n.hidden=false;n.addEventListener("click",function(){navigator.share({title:n.dataset.title,url:n.dataset.url}).catch(function(){})})}'
+            . 'document.querySelectorAll("[data-share-copy]").forEach(function(b){b.addEventListener("click",function(){'
+            . 'navigator.clipboard&&navigator.clipboard.writeText(b.dataset.shareCopy).catch(function(){})})})})();</script>';
+    }
+
     public static function webVitalsSnippet(): string
     {
         return '<script>(function(){try{'

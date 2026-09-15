@@ -49,6 +49,10 @@ Route::get('/seo-admin', [SeoController::class, 'admin']);
 // the ticket asks the runtime to render, not just resolve metadata for). Specific literal
 // prefixes, same risk profile as /sitemap.xml and /robots.txt above — never a generic catch-all.
 Route::get('/authors/{slug}', [SeoController::class, 'author']);
+// The literal /help index is registered ahead of /help/{slug}: Laravel matches literal segments
+// before a parameterized one at the same depth regardless of order, but ahead reads clearest.
+Route::get('/help', [SeoController::class, 'helpIndex']);
 Route::get('/help/{slug}', [SeoController::class, 'help']);
+Route::get('/editorial-guidelines', [SeoController::class, 'editorialGuidelines']);
 Route::get('/tools/{slug}', [SeoController::class, 'tool']);
 Route::get('/tools/{slug}/embed', [SeoController::class, 'toolEmbed']);

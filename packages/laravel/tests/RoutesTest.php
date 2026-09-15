@@ -16,7 +16,7 @@ class RoutesTest extends FacadeTestCase
     {
         $this->getJson('/api/seo/health')->assertStatus(401)->assertExactJson(['error' => 'unauthorized']);
         $this->withHeader('Authorization', 'Bearer test-secret')
-            ->getJson('/api/seo/health')->assertStatus(200);
+            ->getJson('/api/seo/health')->assertStatus(200)->assertJson(['share' => true]);
     }
 
     public function test_an_unknown_seo_route_is_401_then_404(): void

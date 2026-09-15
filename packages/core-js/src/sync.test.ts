@@ -133,6 +133,7 @@ test('the health payload carries version, counts and the hit deltas, and does NO
   assert.equal(h.snapshotVersion, 2)
   assert.deepEqual(h.redirectHits, [{ source: '/a', hits: 2 }])
   assert.deepEqual(h.counts, { pages: 0, redirects: 1, articles: 0, storeFailures: 0 })
+  assert.equal(h.share, true)
   // Reading health twice reports the same deltas: only a 2xx from the hub clears them, so a
   // ping that never arrives loses nothing.
   assert.deepEqual((await healthPayload(store, '0.1.0', 'x')).redirectHits, [{ source: '/a', hits: 2 }])
@@ -168,5 +169,12 @@ test('health on an empty store still answers', async () => {
   const h = await healthPayload(store, '0.1.0', 'x')
   assert.equal(h.snapshotVersion, 0)
   assert.equal(h.lastSyncAt, null)
+  cleanup()
+})
+
+test('health reports share:false only when the integrator explicitly opts out', async () => {
+  const { store, cleanup } = tmpStore()
+  assert.equal((await healthPayload(store, '0.1.0', 'x')).share, true)
+  assert.equal((await healthPayload(store, '0.1.0', 'x', false)).share, false)
   cleanup()
 })

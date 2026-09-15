@@ -74,6 +74,19 @@ test('a page alone in its group advertises only itself', () => {
   assert.deepEqual(Object.keys(r.alternates), ['en', 'x-default'])
 })
 
+// V2-PHASE-8 (12-international-seo.md): a language that maps to exactly one market on the site
+// gets a region-coded hreflang alias ("ar-SA") next to the plain code ("ar"), both for the same
+// path. `composeSeo` builds `alternates` straight off each group member's own `lang`, with no
+// allowlist against `settings` anywhere in between — so a region code already prints as-is; this
+// pins that down rather than changing behaviour.
+test('a region-coded hreflang key in the page group is printed as-is, unfiltered', () => {
+  const ar: SnapshotPage = { ...page, lang: 'ar', path: '/ar/doctors/anna' }
+  const arSA: SnapshotPage = { ...page, lang: 'ar-SA', path: '/ar/doctors/anna' }
+  const r = composeSeo(page, settings, page.path, 'en', [page, ar, arSA])
+  assert.equal(r.alternates['ar'], 'https://x.com/ar/doctors/anna')
+  assert.equal(r.alternates['ar-SA'], 'https://x.com/ar/doctors/anna')
+})
+
 test('the organization is the last JSON-LD entry and the page schema type is used', () => {
   const r = composeSeo(page, settings, page.path, 'en')
   const types = r.jsonld.map((e) => e['@type'])

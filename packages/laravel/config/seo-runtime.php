@@ -19,4 +19,8 @@ return [
     // hub payload and returns ['results' => [...], 'skipped' => [...]] plus, optionally, a
     // 'status' the route answers with — that is how a site keeps its own 409 or 422.
     'on_article' => null,
+
+    // Appends the share block (Entities::shareBlockHtml) to the author/help/tool pages this
+    // package renders, and reports it on the health ping. Set to false to opt out.
+    'share' => true,
 ];

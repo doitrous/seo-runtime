@@ -70,7 +70,7 @@ with it. When `settings.indexingEnabled` is false, `robots.index` is false for e
 | `POST /api/articles` | Bearer secret | Spec-1 article payload. `200 {results, skipped}` \| `400 {error}` \| `401 {error:'unauthorized'}` \| `409 {error:'slug_taken', …}` \| `413 {error:'too large'}` \| any status an `onArticle` hook asks for (Aspects' `422 {error:'publication_gate'}`). |
 | `POST /api/seo/sync` | Bearer secret | Full snapshot with a `version`. `200 {status:'applied'\|'stale', version}`. A snapshot whose `version` is lower than the stored one is ignored and answered `stale`. A body that is not a well-formed snapshot is `400 {status:'invalid'}` — never a 500. |
 | `GET /api/seo/pages` | Bearer secret | `{pages: [{key, type, lang, path, title, updatedAt}]}` from the site's page provider, plus the runtime's own article pages at `articlePath(lang, slug)`. Each article appears exactly once per stored language. |
-| `GET /api/seo/health` | **Bearer secret** | `{version, siteSlug, lastSyncAt, snapshotVersion, counts, redirectHits: [{source, hits}]}` (at most 1,000 entries, busiest first; the rest wait for the next ping). It names the site and enumerates every redirect source path, and it is the only route whose response resets state, so it is never anonymous. |
+| `GET /api/seo/health` | **Bearer secret** | `{version, siteSlug, lastSyncAt, snapshotVersion, counts, redirectHits: [{source, hits}], share}` (at most 1,000 redirect entries, busiest first; the rest wait for the next ping). It names the site and enumerates every redirect source path, and it is the only route whose response resets state, so it is never anonymous. `share` is true unless the integrator opts out (`opts.share === false` / Laravel's `seo-runtime.share` config); a hub reading an older payload with no `share` key at all treats it as false. |
 | `GET /api/seo/probe?path=&lang=` | Bearer secret | `resolveSeo` as JSON. Exists so the conformance suite can check resolution over HTTP on every stack; not part of rendering. |
 | `GET /sitemap.xml` | none | See below. |
 | `GET /robots.txt` | none | See below. |
@@ -179,11 +179,13 @@ them.
 | `crawlerPolicy {allow: string[], disallow: string[]}` | `settings` | `robots.txt`: one `User-agent: {ua}` block per name in `allow` (`Allow: /`) and per name in `disallow` (`Disallow: /`), after the default `*` block and before `Sitemap:`. A UA name is stripped of `\r`/`\n` first — it is one line and must never inject a second one. |
 | `entity` (a JSON-LD object) | `settings` | An extra `jsonld` entry on **every** resolved page (no route awareness in `resolveSeo`/`composeSeo` — this is the ticket's own fallback for a package with none, and it also covers `/` and `/about` because it covers every path). Dropped unless schema.org-shaped (`@context: https://schema.org` and a string `@type`), same rule as a page's `structuredData` override. |
 | `authors[] {slug, name, title, credentials, sameAs[], bio}` | `settings` | `/authors/{slug}`, a page the runtime renders itself (unlike an article): `<h1>` name, title/credentials/bio, a `sameAs` link list, plus a `Person` JSON-LD block. 404 for an unknown slug. |
-| `helpEntries[] {slug, lang, question, answerHtml, moneyPageUrl, updatedAt}` | `settings` | `/help/{slug}` (matched by `slug` **and** `lang`, `lang` from `?lang=`, default the site's first supported language): the question as `<h1>`, `answerHtml` (pre-rendered, trusted HTML from the hub — rendered as-is, like an article's `bodyHtml`) first, a link to `moneyPageUrl`, and an `Article` JSON-LD block with `headline` = the question and `dateModified` = `updatedAt`. |
+| `helpEntries[] {slug, lang, question, answerHtml, moneyPageUrl, updatedAt}` | `settings` | `/help/{slug}` (matched by `slug` **and** `lang`, `lang` from `?lang=`, default the site's first supported language): the question as `<h1>`, `answerHtml` (pre-rendered, trusted HTML from the hub — rendered as-is, like an article's `bodyHtml`) first, a link to `moneyPageUrl`, and an `Article` JSON-LD block with `headline` = the question and `dateModified` = `updatedAt`. Every entry for a language also lists at `GET /help` (below). |
 | `tools[] {slug, lang, kind, config, methodologyHtml, dataSource, asOf}` | `settings` | `/tools/{slug}` (matched by `slug` and `lang` the same way): a placeholder container (`<div id="seo-tool-{slug}" data-kind data-config>`) the interactive kit mounts into at runtime, the `methodologyHtml` block, a `dataSource`/`asOf` line, and a `WebApplication` JSON-LD block. |
 | `verification {googleMeta?, bingMeta?}` | `settings` | `<meta name="google-site-verification" content="{googleMeta}">` / `<meta name="msvalidate.01" content="{bingMeta}">` in the head, alongside every other head tag. |
 | `indexNowKey` | `settings` | `GET /{key}.txt` → `200 text/plain`, body = the key, exactly. Every other path is untouched — this is a check against the one exact expected path, never a route/pattern broad enough to shadow a host's own top-level `*.txt` handling. |
 | `ga4MeasurementId?` | `settings` | The gtag.js snippet (`<script async src="…/gtag/js?id={id}">` + the inline `gtag('config', …)` call), only when set. The id is checked against `^[A-Za-z0-9_-]+$` and dropped (not escaped) when it fails — it sits inside a JS string literal, not an HTML attribute. |
+| `markets[] {country, lang, currency?}` | `settings` | Region-coded hreflang support (12-international-seo.md): carried through `resolveSeo`'s `alternates` unfiltered (any `lang` key a page group member carries, region-coded or not, is printed as-is — there is no allowlist against `settings` in that path). Not otherwise rendered by this package; the hub decides which region-coded keys to emit. |
+| `editorialGuidelinesHtml?` | `settings` | `GET /editorial-guidelines` (01-site-setup.md): pre-rendered, trusted HTML from the hub, rendered as-is like a help entry's `answerHtml` — an `<h1>Editorial guidelines</h1>` followed by the HTML, or a placeholder when unset. Always `200`, never `404`. |
 
 `resolveSeo`'s returned shape gains two more optional keys, `verification` and
 `ga4MeasurementId`, copied straight from `settings` — every stack's head-tag renderer needs them
@@ -197,6 +199,24 @@ article" (Article ingest, above): the ticket asks the runtime to render these th
 types itself, not just resolve metadata for them. They are otherwise ordinary anonymous GET
 routes, same risk profile as `/sitemap.xml` and `/robots.txt` — a specific literal prefix, never a
 generic catch-all.
+
+**V2-PHASE-8 (`GET /help`, `GET /editorial-guidelines`, the share block).** `GET /help` is the
+help index (06-help-page.md): every `helpEntries[]` entry for `?lang=` (default the site's first
+supported language), a client-side search filter, and a `FAQPage` block for the first 10
+questions — `core-js`'s `helpIndexBodyHtml(settings, lang)`, shipped by Express and Laravel;
+site-template's own `app/help/page.tsx` calls the same function for the Next stack, since Next
+renders its own pages rather than having this package render them. It always answers `200`, even
+with zero entries. `GET /editorial-guidelines` (01-site-setup.md) is `editorialBodyHtml(settings)`
+the same way — always `200`. Both are shipped by Express and Laravel; a Next site wires them
+itself (`helpIndexBodyHtml`/`editorialBodyHtml` are re-exported from `@omary98/seo-runtime-next`
+for exactly that). The share block (01-site-setup.md §5) — server-rendered WhatsApp/X/Facebook/
+LinkedIn/copy-link anchors plus a small inline script that upgrades a hidden "Share" button to
+`navigator.share()` when the browser has it (`entities.ts`'s `shareBlockHtml({url, title})`) — is
+appended to every author/help/tool page (and the two routes above) on Express and Laravel, opt-out
+via `opts.share === false` / Laravel's `seo-runtime.share` config; Next ships it as a
+`<ShareBlock url title />` server component (`@omary98/seo-runtime-next`) a site includes itself,
+same pattern as `<SeoJsonLd/>`. It is never appended to `/tools/{slug}/embed`, which stays a
+minimal iframe-able view.
 
 `/tools/{slug}/embed` is the iframe-able view of a tool, shipped by **Express and Laravel only**
 (this is not a package-wide row — `packages/next`'s `toolBodyHtml(tool)` call and

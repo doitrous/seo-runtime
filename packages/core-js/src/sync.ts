@@ -83,13 +83,14 @@ export const HEALTH_INTERVAL_MS = 60 * 60_000
  * unref'd so neither holds the process open. Returns a stop function that clears both.
  */
 export function startSync(
-  store: SeoStore, opts: { version: string; intervalMs?: number; healthIntervalMs?: number },
+  store: SeoStore, opts: { version: string; intervalMs?: number; healthIntervalMs?: number; share?: boolean },
 ): () => void {
+  const share = opts.share !== false
   void pullSnapshot(store)
-  void sendHealth(store, opts.version)
+  void sendHealth(store, opts.version, undefined, share)
   const pullTimer = setInterval(() => void pullSnapshot(store), opts.intervalMs ?? PULL_INTERVAL_MS)
   pullTimer.unref?.()
-  const healthTimer = setInterval(() => void sendHealth(store, opts.version), opts.healthIntervalMs ?? HEALTH_INTERVAL_MS)
+  const healthTimer = setInterval(() => void sendHealth(store, opts.version, undefined, share), opts.healthIntervalMs ?? HEALTH_INTERVAL_MS)
   healthTimer.unref?.()
   return () => { clearInterval(pullTimer); clearInterval(healthTimer) }
 }
