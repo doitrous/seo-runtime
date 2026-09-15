@@ -52,4 +52,36 @@ class HeadTest extends FacadeTestCase
 
         $this->assertSame(Seo::head('/en/a', 'en'), $rendered);
     }
+
+    /** The three hub-driven tag kinds — verification, GA4, JSON-LD — in one @seoHead render. */
+    public function test_seo_head_directive_renders_verification_gtag_and_json_ld(): void
+    {
+        $store = $this->store();
+        $snapshot = $this->snapshot();
+        $snapshot['settings']['verification'] = ['googleMeta' => 'g-abc', 'bingMeta' => 'b-xyz'];
+        $snapshot['settings']['ga4MeasurementId'] = 'G-ABC123';
+        $store->putSnapshot($snapshot);
+
+        $html = \Illuminate\Support\Facades\Blade::render("@seoHead('/en/a', 'en')");
+
+        $this->assertStringContainsString('<meta name="google-site-verification" content="g-abc">', $html);
+        $this->assertStringContainsString('<meta name="msvalidate.01" content="b-xyz">', $html);
+        $this->assertStringContainsString('<script async src="https://www.googletagmanager.com/gtag/js?id=G-ABC123"></script>', $html);
+        $this->assertStringContainsString("gtag('config','G-ABC123')", $html);
+        $this->assertStringContainsString('<script type="application/ld+json">', $html);
+    }
+
+    /** No verification/GA4 settings set: those two tag kinds are absent, everything else renders as usual. */
+    public function test_seo_head_omits_verification_and_gtag_when_settings_have_no_ids(): void
+    {
+        $store = $this->store();
+        $store->putSnapshot($this->snapshot());
+
+        $html = Seo::head('/en/a', 'en');
+
+        $this->assertStringNotContainsString('google-site-verification', $html);
+        $this->assertStringNotContainsString('msvalidate.01', $html);
+        $this->assertStringNotContainsString('googletagmanager.com/gtag/js', $html);
+        $this->assertStringNotContainsString('gtag(', $html);
+    }
 }
