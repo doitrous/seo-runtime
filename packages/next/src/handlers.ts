@@ -19,8 +19,9 @@ export type SeoConfig = {
   articlePath?: ArticlePath
   version?: string
   /** Reported on the health ping. Next never renders the share block itself (a site includes
-   * `<ShareBlock/>` where it wants one, same as `<SeoJsonLd/>`) — this only says whether the
-   * integrator considers it wired. Defaults to true; pass `false` to opt out. */
+   * `<ShareBlock/>` where it wants one, same as `<SeoJsonLd/>`) — this package has no way to
+   * verify it's actually wired in, unlike Express/Laravel, which append the block themselves.
+   * Defaults to `false`; pass `share: true` once `<ShareBlock/>` is in place to opt in. */
   share?: boolean
 }
 
@@ -86,7 +87,7 @@ export async function handleSeoGet(config: SeoConfig, req: Request, route: strin
   // redirect source path. It has no side effect — the counters are drained by `sendHealth`,
   // after the hub answers 2xx.
   if (!authorized(req)) return unauthorized()
-  if (route === 'health') return json(await healthPayload(config.store, version, readConfig().slug, config.share !== false))
+  if (route === 'health') return json(await healthPayload(config.store, version, readConfig().slug, config.share === true))
   if (route === 'pages') {
     return json({ pages: [...await config.pages(), ...await articlePages(config.store, config.articlePath ?? DEFAULT_ARTICLE_PATH)] })
   }

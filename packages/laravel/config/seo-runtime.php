@@ -23,4 +23,11 @@ return [
     // Appends the share block (Entities::shareBlockHtml) to the author/help/tool pages this
     // package renders, and reports it on the health ping. Set to false to opt out.
     'share' => true,
+
+    // Skip registering one of the two routes this ticket added, when a host app already has its
+    // own route at that path — see routes/seo.php's own comment and CONTRACT.md.
+    'routes' => [
+        'help' => true,
+        'editorial_guidelines' => true,
+    ],
 ];

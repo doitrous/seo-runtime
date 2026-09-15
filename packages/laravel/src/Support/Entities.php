@@ -222,7 +222,11 @@ class Entities
         $e = fn ($s) => Sitemap::xmlEscape((string) $s);
         $entries = array_values(array_filter($settings['helpEntries'] ?? [], fn ($h) => ($h['lang'] ?? null) === $lang));
         if ($entries) {
-            $items = implode('', array_map(fn ($h) => '<li><a href="/help/' . $e($h['slug']) . '?lang=' . $e($lang) . '">' . $e($h['question']) . '</a></li>', $entries));
+            // The slug and lang are hub-supplied strings, not developer-authored config:
+            // rawurlencode first so a quote or `?`/`&` in either can never break out of the href
+            // it lands in, then xmlEscape as usual for the HTML attribute itself (belt and
+            // braces, same split embedSnippet uses for a tool slug).
+            $items = implode('', array_map(fn ($h) => '<li><a href="' . $e('/help/' . rawurlencode($h['slug']) . '?lang=' . rawurlencode($lang)) . '">' . $e($h['question']) . '</a></li>', $entries));
             $list = '<ul class="seo-help-index">' . $items . '</ul>';
         } else {
             $list = '<p>No help entries yet.</p>';
@@ -250,6 +254,24 @@ class Entities
         $html = trim((string) ($settings['editorialGuidelinesHtml'] ?? ''));
 
         return '<h1>Editorial guidelines</h1>' . ($html !== '' ? $html : '<p>Editorial guidelines are not published yet.</p>');
+    }
+
+    /**
+     * hreflang for the five locale-free routes this package renders itself (`/help`,
+     * `/help/{slug}`, `/editorial-guidelines`, `/authors/{slug}`, `/tools/{slug}`): matched by
+     * `?lang=`, not a path segment, so there is no stored page record to group alternates from.
+     * `$path` is the bare path with no query. The current language's own URL stays the page's
+     * canonical (computed separately by SeoManager::resolve); this only supplies the reciprocal
+     * set. Never used on `/tools/{slug}/embed`, which stays canonical-only (noindex).
+     */
+    public static function localeFreeAlternates(array $supported, string $path): array
+    {
+        $p = Snapshot::normalizePath($path);
+        $out = [];
+        foreach ($supported as $lang) $out[$lang] = "$p?lang=" . rawurlencode($lang);
+        if ($supported) $out['x-default'] = $out[$supported[0]];
+
+        return $out;
     }
 
     /**

@@ -13,7 +13,7 @@ export { withSeoRedirects } from './redirects.ts'
 // Convenience re-exports of core-js's pure helpers: a Next site's /help and
 // /editorial-guidelines pages call these directly (see site-template's app/help/page.tsx and
 // app/editorial-guidelines/page.tsx) without needing a second import from the core package.
-export { editorialBodyHtml, helpIndexBodyHtml } from '@omary98/seo-runtime-core'
+export { editorialBodyHtml, helpIndexBodyHtml, localeFreeAlternates } from '@omary98/seo-runtime-core'
 
 // Derived, never hand-written — a hand-written copy goes stale the moment createSeo grows a
 // member.
@@ -88,7 +88,7 @@ export function createSeo(config: SeoConfig) {
       // in both places instead of a second copy that drifts.
       POST: async (req: Request) => handleSeoPost(config, req, 'articles'),
     },
-    start: () => startSync(config.store, { version, share: config.share }),
+    start: () => startSync(config.store, { version, share: config.share === true }),
   }
 }
 

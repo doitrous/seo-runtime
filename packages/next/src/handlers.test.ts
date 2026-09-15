@@ -130,14 +130,16 @@ test('health is authenticated, reports the version and counts, and does not drai
   // Reading it twice reports the same hits: only a 2xx from the hub clears them.
   assert.deepEqual((await (await seo.handlers.GET(get('/api/seo/health'), ctx('health'))).json() as { redirectHits: unknown[] }).redirectHits,
     [{ source: '/old', hits: 1 }])
-  assert.equal(body.share, true)
+  // Next can never verify `<ShareBlock/>` is actually wired in, unlike Express/Laravel which
+  // append the block themselves — so the default here is false, opt-in only.
+  assert.equal(body.share, false)
   cleanup()
 })
 
-test('health reports share:false only when the integrator explicitly opts out', async () => {
-  const { seo, cleanup } = runtime({ share: false })
+test('health reports share:true only when the integrator explicitly opts in', async () => {
+  const { seo, cleanup } = runtime({ share: true })
   const res = await seo.handlers.GET(get('/api/seo/health'), ctx('health'))
-  assert.equal((await res.json() as { share: boolean }).share, false)
+  assert.equal((await res.json() as { share: boolean }).share, true)
   cleanup()
 })
 

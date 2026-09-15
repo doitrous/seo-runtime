@@ -67,6 +67,14 @@ class SeoManager
         return $this->shareEnabled() ? Entities::shareBlockHtml($seo['canonical'], $title) : '';
     }
 
+    /** These five routes are matched by `?lang=`, not a path segment, so `resolve()`'s page-group
+     * alternates are always empty for them — Entities::localeFreeAlternates fills that in off the
+     * configured language list. Never applied to `/tools/{slug}/embed` (packages/CONTRACT.md). */
+    private function alternatesFor(string $path): array
+    {
+        return Entities::localeFreeAlternates((array) config('seo-runtime.supported', ['en']), $path);
+    }
+
     public function ingest(mixed $payload): array
     {
         return Articles::ingest($this->store, $payload, (array) config('seo-runtime.supported', ['en']));
@@ -83,6 +91,7 @@ class SeoManager
         $lang = $lang[0] ?? 'en';
         $seo = $this->resolve($path, $lang);
         $seo['jsonld'][] = Entities::personJsonLd($author, Snapshot::absoluteUrl($settings, $lang, $path));
+        $seo['alternates'] = $this->alternatesFor($path);
 
         return ['bodyHtml' => Entities::authorBodyHtml($author) . $this->shareFor($seo, $author['name']), 'seo' => $seo];
     }
@@ -95,6 +104,7 @@ class SeoManager
         $path = "/help/{$entry['slug']}";
         $seo = $this->resolve($path, $lang);
         $seo['jsonld'][] = Entities::helpArticleJsonLd($entry, Snapshot::absoluteUrl($settings, $lang, $path));
+        $seo['alternates'] = $this->alternatesFor($path);
 
         return ['bodyHtml' => Entities::helpBodyHtml($entry) . $this->shareFor($seo, $entry['question']), 'seo' => $seo];
     }
@@ -104,6 +114,7 @@ class SeoManager
     {
         $settings = $this->store->getSettings() ?? Snapshot::EMPTY_SETTINGS;
         $seo = $this->resolve('/help', $lang);
+        $seo['alternates'] = $this->alternatesFor('/help');
 
         return ['bodyHtml' => Entities::helpIndexBodyHtml($settings, $lang) . $this->shareFor($seo, 'Help'), 'seo' => $seo];
     }
@@ -113,6 +124,7 @@ class SeoManager
     {
         $settings = $this->store->getSettings() ?? Snapshot::EMPTY_SETTINGS;
         $seo = $this->resolve('/editorial-guidelines', $lang);
+        $seo['alternates'] = $this->alternatesFor('/editorial-guidelines');
 
         return ['bodyHtml' => Entities::editorialBodyHtml($settings) . $this->shareFor($seo, 'Editorial guidelines'), 'seo' => $seo];
     }
@@ -125,6 +137,7 @@ class SeoManager
         $path = "/tools/{$tool['slug']}";
         $seo = $this->resolve($path, $lang);
         $seo['jsonld'][] = Entities::toolJsonLd($tool, Snapshot::absoluteUrl($settings, $lang, $path));
+        $seo['alternates'] = $this->alternatesFor($path);
         $origin = $this->originFor($settings, $lang);
 
         return ['bodyHtml' => Entities::toolBodyHtml($tool, $origin, $this->siteNameOf($settings, $origin)) . $this->shareFor($seo, $tool['kind']), 'seo' => $seo];

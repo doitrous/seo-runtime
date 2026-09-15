@@ -2,7 +2,7 @@ import type { Request, RequestHandler, Response, Router } from 'express'
 import {
   absoluteUrl, applySnapshot, authorBodyHtml, bearerOf, DEFAULT_ARTICLE_PATH, editorialBodyHtml,
   EMPTY_SETTINGS, findAuthor, findHelpEntry, findTool, healthPayload, helpArticleJsonLd,
-  helpBodyHtml, helpIndexBodyHtml, indexNowKeyFile, ingestArticles, normalizePath, personJsonLd,
+  helpBodyHtml, helpIndexBodyHtml, indexNowKeyFile, ingestArticles, localeFreeAlternates, normalizePath, personJsonLd,
   proxyApprovalAction, proxyPending, readConfig, redirectFor, resolveSeo, robotsTxt, shareBlockHtml,
   sitemapEntries, sitemapXml, startSync, submitIndexNow, submitVitals, timingSafeSecret,
   toolBodyHtml, toolEmbedHtml, toolJsonLd,
@@ -270,6 +270,10 @@ export function seoRuntime(opts: ExpressSeoOptions) {
     // Appended to the author/help/tool bodies below when share is enabled (opts.share !== false)
     // — never to the tool embed, which stays a minimal iframe-able view (packages/CONTRACT.md).
     const shareFor = (seo: ResolvedSeo, title: string) => shareEnabled ? shareBlockHtml({ url: seo.canonical, title }) : ''
+    // These five routes are matched by `?lang=`, not a path segment, so `resolveSeo`'s page-group
+    // `alternates` are always empty for them — there is no stored page record to group by.
+    // `localeFreeAlternates` fills that in; never applied to `/tools/:slug/embed` (CONTRACT.md).
+    const alternatesFor = (path: string) => localeFreeAlternates(opts.supported ?? ['en'], path)
 
     // v2 content pages, rendered by the package itself (unlike an article: these are new page
     // types the ticket asks the runtime to render, not just resolve metadata for).
@@ -281,7 +285,7 @@ export function seoRuntime(opts: ExpressSeoOptions) {
       const path = `/authors/${author.slug}`
       const seo = await resolveSeo(opts.store, path, lang)
       const jsonld = [...seo.jsonld, personJsonLd(author, absoluteUrl(settings, lang, path))]
-      const html = await injectHead(`<html><head></head><body></body></html>`, { ...seo, jsonld })
+      const html = await injectHead(`<html><head></head><body></body></html>`, { ...seo, jsonld, alternates: alternatesFor(path) })
       const body = authorBodyHtml(author) + shareFor(seo, author.name)
       res.type('html').send(html.replace('<body></body>', `<body>${body}</body>`))
     })
@@ -293,7 +297,7 @@ export function seoRuntime(opts: ExpressSeoOptions) {
       const settings = (await opts.store.getSettings()) ?? EMPTY_SETTINGS
       const lang = String(req.query.lang ?? opts.supported?.[0] ?? 'en')
       const seo = await resolveSeo(opts.store, '/help', lang)
-      const html = await injectHead(`<html><head></head><body></body></html>`, seo)
+      const html = await injectHead(`<html><head></head><body></body></html>`, { ...seo, alternates: alternatesFor('/help') })
       const body = helpIndexBodyHtml(settings, lang) + shareFor(seo, 'Help')
       res.type('html').send(html.replace('<body></body>', `<body>${body}</body>`))
     })
@@ -306,7 +310,7 @@ export function seoRuntime(opts: ExpressSeoOptions) {
       const path = `/help/${entry.slug}`
       const seo = await resolveSeo(opts.store, path, lang)
       const jsonld = [...seo.jsonld, helpArticleJsonLd(entry, absoluteUrl(settings, lang, path))]
-      const html = await injectHead(`<html><head></head><body></body></html>`, { ...seo, jsonld })
+      const html = await injectHead(`<html><head></head><body></body></html>`, { ...seo, jsonld, alternates: alternatesFor(path) })
       const body = helpBodyHtml(entry) + shareFor(seo, entry.question)
       res.type('html').send(html.replace('<body></body>', `<body>${body}</body>`))
     })
@@ -318,7 +322,7 @@ export function seoRuntime(opts: ExpressSeoOptions) {
       const settings = (await opts.store.getSettings()) ?? EMPTY_SETTINGS
       const lang = String(req.query.lang ?? opts.supported?.[0] ?? 'en')
       const seo = await resolveSeo(opts.store, '/editorial-guidelines', lang)
-      const html = await injectHead(`<html><head></head><body></body></html>`, seo)
+      const html = await injectHead(`<html><head></head><body></body></html>`, { ...seo, alternates: alternatesFor('/editorial-guidelines') })
       const body = editorialBodyHtml(settings) + shareFor(seo, 'Editorial guidelines')
       res.type('html').send(html.replace('<body></body>', `<body>${body}</body>`))
     })
@@ -331,7 +335,7 @@ export function seoRuntime(opts: ExpressSeoOptions) {
       const path = `/tools/${tool.slug}`
       const seo = await resolveSeo(opts.store, path, lang)
       const jsonld = [...seo.jsonld, toolJsonLd(tool, absoluteUrl(settings, lang, path))]
-      const html = await injectHead(`<html><head></head><body></body></html>`, { ...seo, jsonld })
+      const html = await injectHead(`<html><head></head><body></body></html>`, { ...seo, jsonld, alternates: alternatesFor(path) })
       const origin = originFor(settings, lang)
       const body = toolBodyHtml(tool, origin ? { origin, siteName: siteNameOf(settings, origin) } : undefined) + shareFor(seo, tool.kind)
       res.type('html').send(html.replace('<body></body>', `<body>${body}</body>`))

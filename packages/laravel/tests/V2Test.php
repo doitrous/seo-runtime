@@ -130,6 +130,47 @@ class V2Test extends FacadeTestCase
         $this->assertStringContainsString('<script src="/seo-tools.js" defer></script>', $html);
     }
 
+    // V2-PHASE-8: these five routes have no stored page record for resolve() to group alternates
+    // from, so SeoManager::alternatesFor supplies them synthetically off config('seo-runtime.supported')
+    // (['en', 'ar'] here, per TestCase::defineEnvironment). The embed route is excluded on purpose
+    // (packages/CONTRACT.md) and must keep printing none.
+    public function test_the_five_locale_free_routes_carry_hreflang_for_every_supported_language_but_the_tool_embed_carries_none(): void
+    {
+        $this->store()->putSnapshot($this->snapshotWith([
+            'authors' => [['slug' => 'jane', 'name' => 'Jane Doe', 'title' => 'Editor', 'credentials' => '', 'sameAs' => [], 'bio' => '']],
+            'helpEntries' => [['slug' => 'refund', 'lang' => 'en', 'question' => 'How do refunds work?', 'answerHtml' => '<p>Answer.</p>', 'moneyPageUrl' => '/pricing', 'updatedAt' => '2026-09-01T00:00:00.000Z']],
+            'tools' => [['slug' => 'calc', 'lang' => 'en', 'kind' => 'Calculator', 'config' => [], 'methodologyHtml' => '<p>Method.</p>', 'dataSource' => 'ONS', 'asOf' => '2026-08-01']],
+        ]));
+
+        foreach (['/help', '/help/refund', '/editorial-guidelines', '/authors/jane', '/tools/calc'] as $path) {
+            $html = $this->get($path)->assertStatus(200)->getContent();
+            $this->assertStringContainsString("<link rel=\"alternate\" hreflang=\"en\" href=\"$path?lang=en\">", $html);
+            $this->assertStringContainsString("<link rel=\"alternate\" hreflang=\"ar\" href=\"$path?lang=ar\">", $html);
+            $this->assertStringContainsString("<link rel=\"alternate\" hreflang=\"x-default\" href=\"$path?lang=en\">", $html);
+        }
+
+        $embed = $this->get('/tools/calc/embed')->assertStatus(200)->getContent();
+        $this->assertStringNotContainsString('hreflang=', $embed);
+    }
+
+    // V2-PHASE-8: hub-supplied slug/question, hostile — helpIndexBodyHtml rawurlencode's the href
+    // segments before Sitemap::xmlEscape's attribute escaping (belt and braces), mirroring
+    // core-js's entities.test.ts XSS case for parity.
+    public function test_help_index_body_html_encodes_a_hostile_slug_and_question_so_neither_breaks_out_of_the_href_or_link_text(): void
+    {
+        $html = \Doitrous\SeoRuntime\Support\Entities::helpIndexBodyHtml([
+            'helpEntries' => [[
+                'slug' => '"><script>alert(1)</script>', 'lang' => 'en',
+                'question' => '</a><script>alert(2)</script>', 'answerHtml' => '', 'moneyPageUrl' => '', 'updatedAt' => '',
+            ]],
+        ], 'en');
+        $this->assertStringNotContainsString('"><script>alert(1)</script>', $html);
+        $this->assertStringNotContainsString('</a><script>alert(2)</script>', $html);
+        $this->assertStringNotContainsString('<script>alert', $html);
+        // rawurlencode (unlike JS's encodeURIComponent) also escapes '(' and ')'.
+        $this->assertStringContainsString('href="/help/%22%3E%3Cscript%3Ealert%281%29%3C%2Fscript%3E?lang=en"', $html);
+    }
+
     public function test_embedsnippet_encodes_a_hub_supplied_slug_so_a_quote_in_it_can_never_break_out_of_the_src_href_attribute(): void
     {
         $html = \Doitrous\SeoRuntime\Support\Entities::embedSnippet(

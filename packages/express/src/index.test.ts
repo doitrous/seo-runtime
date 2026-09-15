@@ -320,6 +320,33 @@ test('v2: the tool embed route answers 200 with noindex,follow and the canonical
   assert.equal((await fetch(`${url}/tools/nope/embed`)).status, 404)
 })
 
+// V2-PHASE-8: the five locale-free routes have no stored page record for resolveSeo to group
+// alternates from, so localeFreeAlternates supplies them synthetically off opts.supported. The
+// embed route is excluded on purpose (CONTRACT.md) and must keep printing none.
+test('v2: /help, /help/:slug, /editorial-guidelines, /authors/:slug and /tools/:slug carry hreflang for every supported language, but /tools/:slug/embed carries none', async (t) => {
+  const { url } = await boot(t)
+  const withEverything: Snapshot = {
+    ...snapshot,
+    settings: {
+      ...snapshot.settings,
+      authors: [{ slug: 'jane', name: 'Jane Doe', title: 'Editor', credentials: '', sameAs: [], bio: '' }],
+      helpEntries: [{ slug: 'refund', lang: 'en', question: 'How do refunds work?', answerHtml: '<p>Answer.</p>', moneyPageUrl: '/pricing', updatedAt: '2026-09-01T00:00:00.000Z' }],
+      tools: [{ slug: 'calc', lang: 'en', kind: 'Calculator', config: {}, methodologyHtml: '<p>Method.</p>', dataSource: 'ONS', asOf: '2026-08-01' }],
+    },
+  }
+  await fetch(`${url}/api/seo/sync`, { method: 'POST', headers: { ...authed, 'content-type': 'application/json' }, body: JSON.stringify(withEverything) })
+
+  for (const path of ['/help', '/help/refund', '/editorial-guidelines', '/authors/jane', '/tools/calc']) {
+    const html = await (await fetch(`${url}${path}`)).text()
+    assert.match(html, new RegExp(`<link rel="alternate" hreflang="en" href="${path}\\?lang=en">`), `hreflang en on ${path}`)
+    assert.match(html, new RegExp(`<link rel="alternate" hreflang="ar" href="${path}\\?lang=ar">`), `hreflang ar on ${path}`)
+    assert.match(html, new RegExp(`<link rel="alternate" hreflang="x-default" href="${path}\\?lang=en">`), `x-default on ${path}`)
+  }
+
+  const embed = await (await fetch(`${url}/tools/calc/embed`)).text()
+  assert.doesNotMatch(embed, /hreflang=/)
+})
+
 // The mocked fetch below must discriminate by URL: the outer test request to the local test
 // server (127.0.0.1) has to reach the REAL fetch, and only the proxy's own internal call to
 // SEO_HUB_URL ('https://hub.test') is the one this suite wants to intercept.

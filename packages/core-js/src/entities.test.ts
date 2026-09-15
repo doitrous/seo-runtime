@@ -3,8 +3,8 @@ import test from 'node:test'
 import {
   authorBodyHtml, editorialBodyHtml, embedSnippet, entityJsonLd, findAuthor, findHelpEntry,
   findTool, gtagSnippet, helpArticleJsonLd, helpBodyHtml, helpIndexBodyHtml, indexNowKeyFile,
-  personJsonLd, shareBlockHtml, toolBodyHtml, toolEmbedHtml, toolJsonLd, verificationMetaTags,
-  webVitalsSnippet,
+  localeFreeAlternates, personJsonLd, shareBlockHtml, toolBodyHtml, toolEmbedHtml, toolJsonLd,
+  verificationMetaTags, webVitalsSnippet,
 } from './entities.ts'
 import { EMPTY_SETTINGS } from './types.ts'
 import type { Settings } from './types.ts'
@@ -173,6 +173,26 @@ test('helpIndexBodyHtml renders a placeholder and no FAQPage block when the lang
   const html = helpIndexBodyHtml(EMPTY_SETTINGS, 'en')
   assert.match(html, /No help entries yet/)
   assert.doesNotMatch(html, /FAQPage/)
+})
+
+test('helpIndexBodyHtml encodes a hostile slug/question so neither breaks out of the href or the link text', () => {
+  const hostile = { ...helpEntry, slug: '"><script>alert(1)</script>', question: '</a><script>alert(2)</script>' }
+  const html = helpIndexBodyHtml({ ...EMPTY_SETTINGS, helpEntries: [hostile] }, 'en')
+  assert.doesNotMatch(html, /"><script>alert\(1\)<\/script>/)
+  assert.doesNotMatch(html, /<\/a><script>alert\(2\)<\/script>/)
+  assert.doesNotMatch(html, /<script>alert/)
+  // The slug survives, percent-encoded, inside the href attribute.
+  assert.match(html, /href="\/help\/%22%3E%3Cscript%3Ealert\(1\)%3C%2Fscript%3E\?lang=en"/)
+})
+
+test('localeFreeAlternates yields one ?lang= URL per supported language plus x-default on the first', () => {
+  const alts = localeFreeAlternates(['en', 'ar'], '/help/refund')
+  assert.deepEqual(alts, { en: '/help/refund?lang=en', ar: '/help/refund?lang=ar', 'x-default': '/help/refund?lang=en' })
+})
+
+test('localeFreeAlternates normalizes the path and is empty for no supported languages', () => {
+  assert.deepEqual(localeFreeAlternates(['en'], '/help/refund/'), { en: '/help/refund?lang=en', 'x-default': '/help/refund?lang=en' })
+  assert.deepEqual(localeFreeAlternates([], '/help'), {})
 })
 
 test('editorialBodyHtml renders the hub HTML as-is, or a placeholder when unset', () => {

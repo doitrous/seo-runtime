@@ -186,15 +186,21 @@ export function indexNowKeyFile(settings: Settings, path: string): string | null
  * `/help` index (06-help-page.md): every entry for `lang`, a client-side filter box, and a
  * FAQPage block for the first 10 questions. `HelpEntry` carries no topic field (that stays hub
  * side, per the ticket), so "grouped" here is one flat, filterable list rather than the topic
- * buckets the doc sketches — a real grouping needs a hub field to group by, which is outside
- * this package's scope.
+ * buckets the doc sketches.
+ * ponytail: flat list, not grouped by topic — upgrade to real groups (before you book, cost and
+ * payment, travel, aftercare, …) once `HelpEntry` gains a `topic` field on the hub side; render
+ * one `<h2>` heading per distinct topic instead of a single flat `<ul>`.
  */
 export function helpIndexBodyHtml(settings: Settings, lang: string): string {
   const e = xmlEscape
   const entries = (settings.helpEntries ?? []).filter((h) => h.lang === lang)
+  // The slug and lang are hub-supplied strings, not developer-authored config: encodeURIComponent
+  // first so a quote or `?`/`&` in either can never break out of the href it lands in, then
+  // xmlEscape as usual for the HTML attribute itself (belt and braces, same split embedSnippet
+  // uses for a tool slug).
   const list = entries.length
     ? `<ul class="seo-help-index">${entries.map((h) =>
-        `<li><a href="/help/${e(h.slug)}?lang=${e(lang)}">${e(h.question)}</a></li>`).join('')}</ul>`
+        `<li><a href="${e(`/help/${encodeURIComponent(h.slug)}?lang=${encodeURIComponent(lang)}`)}">${e(h.question)}</a></li>`).join('')}</ul>`
     : '<p>No help entries yet.</p>'
   const faq = entries.slice(0, 10).map((h) => ({
     '@type': 'Question', name: h.question, acceptedAnswer: { '@type': 'Answer', text: h.answerHtml },
@@ -216,6 +222,23 @@ export function helpIndexBodyHtml(settings: Settings, lang: string): string {
 export function editorialBodyHtml(settings: Settings): string {
   const html = settings.editorialGuidelinesHtml?.trim()
   return '<h1>Editorial guidelines</h1>' + (html || '<p>Editorial guidelines are not published yet.</p>')
+}
+
+/**
+ * hreflang for the five locale-free routes this package renders itself (`/help`,
+ * `/help/{slug}`, `/editorial-guidelines`, `/authors/{slug}`, `/tools/{slug}`): matched by
+ * `?lang=`, not a path segment, so `resolveSeo`'s page-group `alternates` — built from stored
+ * `SnapshotPage` rows — are always empty for these paths; there is no page record to group by.
+ * `path` is the bare path with no query. The current language's own URL stays the page's
+ * `canonical` (computed separately by `resolveSeo`); this only supplies the reciprocal set.
+ * Never used on `/tools/{slug}/embed`, which stays canonical-only (`noindex`).
+ */
+export function localeFreeAlternates(supported: string[], path: string): Record<string, string> {
+  const p = normalizePath(path)
+  const out: Record<string, string> = {}
+  for (const lang of supported) out[lang] = `${p}?lang=${encodeURIComponent(lang)}`
+  if (supported.length) out['x-default'] = out[supported[0]]
+  return out
 }
 
 export type ShareLinks = { url: string; title: string }
