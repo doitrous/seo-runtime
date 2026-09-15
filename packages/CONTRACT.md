@@ -198,8 +198,12 @@ types itself, not just resolve metadata for them. They are otherwise ordinary an
 routes, same risk profile as `/sitemap.xml` and `/robots.txt` — a specific literal prefix, never a
 generic catch-all.
 
-`/tools/{slug}/embed` is the iframe-able view of a tool: the same placeholder container, a link
-back to `/tools/{slug}` (`target="_top"`), and an inline `ResizeObserver` that posts
+`/tools/{slug}/embed` is the iframe-able view of a tool, shipped by **Express and Laravel only**
+(this is not a package-wide row — `packages/next`'s `toolBodyHtml(tool)` call and
+`packages/wordpress` are both untouched by this section; a Next site gets the equivalent from
+site-template's own `app/tools/[slug]/embed/page.tsx` at the application level instead, and
+WordPress support is pending). On those two stacks: the same placeholder container, a link back
+to `/tools/{slug}` (`target="_top"`), and an inline `ResizeObserver` that posts
 `{seoToolHeight}` to the parent — the tool page itself carries the matching "Embed this
 calculator" `<textarea>` (an `embedSnippet`/`toolEmbedHtml` pair per stack) once a snapshot has
 synced; on a cold store there is no origin to build an absolute iframe `src` from, so the section
@@ -209,7 +213,9 @@ the embed path itself, so the embed never competes with the real page for rankin
 `X-Frame-Options` / `frame-ancestors` anywhere — any origin may frame it, the browser default.
 The snippet format and the embed page's resize protocol are ported byte-for-byte from
 site-template's `packages/tools/embed.ts` and `app/tools/[slug]/embed/page.tsx` so a page
-embedded from any site behaves identically.
+embedded from any of these sites behaves identically. `embedSnippet` encodes a hub-supplied slug
+(`encodeURIComponent`/`rawurlencode`) before splicing it into the snippet's `src`/`href`
+attributes, since it is untrusted input, not developer-authored config.
 
 ## Pending/approve proxy (Phase 5)
 

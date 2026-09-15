@@ -120,7 +120,9 @@ class Entities
     public static function embedSnippet(string $origin, string $slug, string $lang, string $title, string $siteName): string
     {
         $e = fn ($s) => Sitemap::xmlEscape((string) $s);
-        $page = "$origin/tools/$slug";
+        // The hub-supplied slug is untrusted: rawurlencode so a quote in it can never break out
+        // of the src/href attribute it lands in below.
+        $page = "$origin/tools/" . rawurlencode($slug);
 
         return implode("\n", [
             '<iframe src="' . $page . '/embed?lang=' . rawurlencode($lang) . '" title="' . $e($title) . '" width="100%" height="480" style="border:0;max-width:100%" loading="lazy"></iframe>',

@@ -96,7 +96,9 @@ export type EmbedOptions = { origin: string; slug: string; lang: string; title: 
  */
 export function embedSnippet({ origin, slug, lang, title, siteName }: EmbedOptions): string {
   const e = xmlEscape
-  const page = `${origin}/tools/${slug}`
+  // The hub-supplied slug is untrusted: encodeURIComponent so a quote in it can never break out
+  // of the src/href attribute it lands in below.
+  const page = `${origin}/tools/${encodeURIComponent(slug)}`
   return [
     `<iframe src="${page}/embed?lang=${encodeURIComponent(lang)}" title="${e(title)}" width="100%" height="480" style="border:0;max-width:100%" loading="lazy"></iframe>`,
     `<p><a href="${page}">${e(title)}</a> — a free tool by <a href="${origin}/" rel="nofollow">${e(siteName)}</a></p>`,

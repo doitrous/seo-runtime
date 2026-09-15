@@ -89,6 +89,13 @@ test('embedSnippet nofollows the brand link and scopes its resize listener to if
   assert.match(html, /iframe\[src\^="https:\/\/site\.test\/"\]/)
 })
 
+test('embedSnippet encodes a hub-supplied slug so a quote in it can never break out of the src/href attribute', () => {
+  const html = embedSnippet({ origin: 'https://site.test', slug: 'calc"><script>x</script>', lang: 'en', title: 'Calculator', siteName: 'Site Co' })
+  assert.doesNotMatch(html, /"><script>x<\/script>/)
+  assert.match(html, /src="https:\/\/site\.test\/tools\/calc%22%3E%3Cscript%3Ex%3C%2Fscript%3E\/embed/)
+  assert.match(html, /<a href="https:\/\/site\.test\/tools\/calc%22%3E%3Cscript%3Ex%3C%2Fscript%3E">/)
+})
+
 test('toolEmbedHtml links back to the canonical page, target=_top, with the resize script', () => {
   const html = toolEmbedHtml(tool, { canonical: 'https://site.test/tools/calc', siteName: 'Site Co' })
   assert.match(html, /id="seo-tool-calc"/)

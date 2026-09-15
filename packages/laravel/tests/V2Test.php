@@ -85,6 +85,16 @@ class V2Test extends FacadeTestCase
         $this->assertStringContainsString('<script src="/seo-tools.js" defer></script>', $html);
     }
 
+    public function test_embedsnippet_encodes_a_hub_supplied_slug_so_a_quote_in_it_can_never_break_out_of_the_src_href_attribute(): void
+    {
+        $html = \Doitrous\SeoRuntime\Support\Entities::embedSnippet(
+            'https://site.test', 'calc"><script>x</script>', 'en', 'Calculator', 'Site Co'
+        );
+        $this->assertStringNotContainsString('"><script>x</script>', $html);
+        $this->assertStringContainsString('src="https://site.test/tools/calc%22%3E%3Cscript%3Ex%3C%2Fscript%3E/embed', $html);
+        $this->assertStringContainsString('<a href="https://site.test/tools/calc%22%3E%3Cscript%3Ex%3C%2Fscript%3E">', $html);
+    }
+
     public function test_the_tool_embed_route_answers_200_with_noindex_follow_and_the_canonical_and_404s_for_an_unknown_slug(): void
     {
         $this->store()->putSnapshot($this->snapshotWith(['tools' => [

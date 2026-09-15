@@ -43,6 +43,51 @@ test('a tool page renders the placeholder container with a WebApplication JSON-L
   assert.match(html, /"@type":"WebApplication"/)
 })
 
+const withTool = { tools: [{ slug: 'calc', lang: 'en', kind: 'Calculator', config: {}, methodologyHtml: '<p>Method.</p>', dataSource: 'ONS', asOf: '2026-08-01' }] }
+
+/**
+ * The embed feature (packages/CONTRACT.md's "/tools/{slug}/embed" paragraph) is Express and
+ * Laravel only — packages/next's tool page still calls `toolBodyHtml(tool)` with one argument,
+ * and packages/wordpress is untouched. Both tests below `t.skip()` with a named reason rather
+ * than asserting, the moment the response makes clear this stack does not render the section
+ * (or the route), so this file still runs unmodified — and unskipped — against every stack in
+ * CI: real, failing coverage on Express/Laravel, an honest documented skip everywhere else.
+ */
+test('the tool page\'s "Embed this calculator" section is omitted on a cold store and present, nofollowed and origin-scoped, once one has synced', async (t) => {
+  await sync(snapshotWith({ baseUrls: {}, ...withTool }))
+  const cold = await (await fetch(`${BASE}/tools/calc?lang=en`)).text()
+  assert.ok(!cold.includes('Embed this calculator'), 'expected no embed section with no origin to build an absolute iframe src from')
+  assert.ok(!cold.includes('undefined'), 'expected no literal "undefined" leaking into the body')
+  assert.ok(!cold.includes('//tools'), 'expected no protocol-relative //tools from an empty origin')
+
+  await sync(snapshotWith(withTool))   // baseUrls back to the fixture's own — snapshotWith merges onto a fresh snapshot()
+  const warm = await (await fetch(`${BASE}/tools/calc?lang=en`)).text()
+  if (!warm.includes('Embed this calculator')) {
+    t.skip('this stack does not render the embed section (packages/CONTRACT.md: Express and Laravel only)')
+    return
+  }
+  // The snippet lives HTML-escaped inside a <textarea readonly>, so its own quotes come back as
+  // entities. siteName is settings.organization.name ('Demo Co' in this fixture).
+  assert.ok(warm.includes('rel=&quot;nofollow&quot;&gt;Demo Co&lt;/a&gt;'), 'expected the nofollowed brand link naming settings.organization.name')
+  assert.ok(warm.includes(`iframe[src^=&quot;${BASE}/&quot;]`), 'expected the resize listener scoped to this origin')
+})
+
+test('GET /tools/{slug}/embed answers 200 with exactly one noindex,follow robots meta and a canonical back to /tools/{slug}, and 404s for an unknown slug', async (t) => {
+  await sync(snapshotWith(withTool))
+  const res = await fetch(`${BASE}/tools/calc/embed?lang=en`)
+  if (res.status === 404) {
+    t.skip('this stack does not implement /tools/{slug}/embed (packages/CONTRACT.md: Express and Laravel only)')
+    return
+  }
+  assert.equal(res.status, 200)
+  const html = await res.text()
+  const robotsMetas = [...html.matchAll(/<meta name="robots" content="([^"]*)">/g)]
+  assert.equal(robotsMetas.length, 1, 'expected exactly one robots meta tag')
+  assert.equal(robotsMetas[0][1], 'noindex, follow')
+  assert.ok(html.includes(`<link rel="canonical" href="${BASE}/tools/calc">`), 'expected the canonical to point at the real tool page, not the embed path')
+  assert.equal((await fetch(`${BASE}/tools/nope/embed`)).status, 404)
+})
+
 test('verification meta and the ga4 snippet are rendered in the head when configured', async () => {
   await sync(snapshotWith({ verification: { googleMeta: 'g-abc', bingMeta: 'b-xyz' }, ga4MeasurementId: 'G-ABC123' }))
   const html = await (await fetch(`${BASE}/en`)).text()
