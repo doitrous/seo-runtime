@@ -73,19 +73,77 @@ export function helpBodyHtml(entry: HelpEntry): string {
     (entry.moneyPageUrl ? `<p class="seo-help-cta"><a href="${e(entry.moneyPageUrl)}">Learn more</a></p>` : '')
 }
 
-/**
- * A placeholder container plus the methodology block — the interactive kit itself ships
- * separately (per the ticket) and mounts into `#seo-tool-{slug}` at runtime.
- */
-export function toolBodyHtml(tool: Tool): string {
+function toolPlaceholderDiv(tool: Tool): string {
   const e = xmlEscape
   const config = JSON.stringify(tool.config ?? {})
+  return `<div id="seo-tool-${e(tool.slug)}" class="seo-tool-placeholder" data-kind="${e(tool.kind)}" data-config="${e(config)}"></div>`
+}
+
+/** Every kind's config carries a `title`; fall back to the slug (ported from site-template's `toolTitle`). */
+function toolTitle(tool: Tool): string {
+  return typeof tool.config?.title === 'string' && tool.config.title ? tool.config.title : tool.slug
+}
+
+export type EmbedOptions = { origin: string; slug: string; lang: string; title: string; siteName: string }
+
+/**
+ * The paste-anywhere snippet shown under a tool page — ported byte-for-byte from site-template's
+ * `packages/tools/embed.ts` so every stack's embed markup matches. The `<p>` outside the iframe
+ * is the point: a crawlable link back to the tool page and the home page, since an iframe alone
+ * passes no link equity. The tool link stays followed (editorial attribution); the brand link is
+ * a pure widget credit and is `rel="nofollow"` per Google's link-spam policy. The `<script>` only
+ * resizes an iframe pointed at this same origin — never an ad or chat widget.
+ */
+export function embedSnippet({ origin, slug, lang, title, siteName }: EmbedOptions): string {
+  const e = xmlEscape
+  // The hub-supplied slug is untrusted: encodeURIComponent so a quote in it can never break out
+  // of the src/href attribute it lands in below.
+  const page = `${origin}/tools/${encodeURIComponent(slug)}`
+  return [
+    `<iframe src="${page}/embed?lang=${encodeURIComponent(lang)}" title="${e(title)}" width="100%" height="480" style="border:0;max-width:100%" loading="lazy"></iframe>`,
+    `<p><a href="${page}">${e(title)}</a> — a free tool by <a href="${origin}/" rel="nofollow">${e(siteName)}</a></p>`,
+    `<script>addEventListener("message",function(e){var h=Number(e.data&&e.data.seoToolHeight);if(!h)return;document.querySelectorAll('iframe[src^="${origin}/"]').forEach(function(f){if(f.contentWindow===e.source)f.style.height=h+"px"})})</script>`,
+  ].join('\n')
+}
+
+/**
+ * A placeholder container plus the methodology block — the interactive kit itself ships
+ * separately (per the ticket) and mounts into `#seo-tool-{slug}` at runtime, via `/seo-tools.js`
+ * (the site copies `public/seo-tools.js` from site-template; see the package README).
+ *
+ * `ctx` is optional so existing call sites keep compiling: on a cold store there is no origin to
+ * build an absolute embed URL from, so the "Embed this calculator" section is omitted entirely
+ * rather than emitting a broken relative iframe src.
+ */
+export function toolBodyHtml(tool: Tool, ctx?: { origin: string; siteName: string }): string {
+  const e = xmlEscape
+  const embed = ctx?.origin
+    ? `<h2>Embed this calculator</h2><textarea readonly rows="6">${e(embedSnippet({
+        origin: ctx.origin, slug: tool.slug, lang: tool.lang, title: toolTitle(tool), siteName: ctx.siteName,
+      }))}</textarea>`
+    : ''
   return `<h1>${e(tool.kind)}</h1>` +
-    `<div id="seo-tool-${e(tool.slug)}" class="seo-tool-placeholder" data-kind="${e(tool.kind)}" data-config="${e(config)}"></div>` +
+    toolPlaceholderDiv(tool) +
     (tool.methodologyHtml ? `<div class="seo-tool-methodology">${tool.methodologyHtml}</div>` : '') +
     (tool.dataSource
       ? `<p class="seo-tool-data-source">Data source: ${e(tool.dataSource)}${tool.asOf ? ` (as of ${e(tool.asOf)})` : ''}</p>`
-      : '')
+      : '') +
+    embed +
+    '<script src="/seo-tools.js" defer></script>'
+}
+
+/**
+ * The iframe-able view of a tool: the calculator placeholder, a link back to the full page, the
+ * calculator bundle, and the inline ResizeObserver postMessage script — ported byte-for-byte from
+ * site-template's `app/tools/[slug]/embed/page.tsx`. `target="_top"` on the link so it navigates
+ * the host page, not the iframe.
+ */
+export function toolEmbedHtml(tool: Tool, ctx: { canonical: string; siteName: string }): string {
+  const e = xmlEscape
+  return toolPlaceholderDiv(tool) +
+    `<p><a href="${e(ctx.canonical)}" target="_top">Full calculator, methodology and FAQ at ${e(ctx.siteName)}</a></p>` +
+    '<script src="/seo-tools.js" defer></script>' +
+    '<script>new ResizeObserver(function(){parent.postMessage({seoToolHeight:document.documentElement.scrollHeight},\'*\')}).observe(document.body)</script>'
 }
 
 export function verificationMetaTags(v: Verification | undefined): string {

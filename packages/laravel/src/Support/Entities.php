@@ -92,18 +92,84 @@ class Entities
         return $html;
     }
 
-    public static function toolBodyHtml(array $tool): string
+    private static function toolPlaceholderDiv(array $tool): string
     {
         $e = fn ($s) => Sitemap::xmlEscape((string) $s);
         $config = json_encode($tool['config'] ?? [], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-        $html = '<h1>' . $e($tool['kind']) . '</h1>'
-            . '<div id="seo-tool-' . $e($tool['slug']) . '" class="seo-tool-placeholder" data-kind="' . $e($tool['kind']) . '" data-config="' . $e($config) . '"></div>';
+
+        return '<div id="seo-tool-' . $e($tool['slug']) . '" class="seo-tool-placeholder" data-kind="' . $e($tool['kind']) . '" data-config="' . $e($config) . '"></div>';
+    }
+
+    /** Every kind's config carries a `title`; fall back to the slug (ported from site-template's `toolTitle`). */
+    private static function toolTitle(array $tool): string
+    {
+        $title = $tool['config']['title'] ?? null;
+
+        return is_string($title) && $title !== '' ? $title : $tool['slug'];
+    }
+
+    /**
+     * The paste-anywhere snippet shown under a tool page — ported byte-for-byte from
+     * site-template's `packages/tools/embed.ts` (core-js's `embedSnippet` is the JS twin) so
+     * every stack's embed markup matches. The `<p>` outside the iframe is the point: a crawlable
+     * link back to the tool page and the home page, since an iframe alone passes no link equity.
+     * The tool link stays followed (editorial attribution); the brand link is a pure widget
+     * credit and is `rel="nofollow"` per Google's link-spam policy. The `<script>` only resizes
+     * an iframe pointed at this same origin — never an ad or chat widget.
+     */
+    public static function embedSnippet(string $origin, string $slug, string $lang, string $title, string $siteName): string
+    {
+        $e = fn ($s) => Sitemap::xmlEscape((string) $s);
+        // The hub-supplied slug is untrusted: rawurlencode so a quote in it can never break out
+        // of the src/href attribute it lands in below.
+        $page = "$origin/tools/" . rawurlencode($slug);
+
+        return implode("\n", [
+            '<iframe src="' . $page . '/embed?lang=' . rawurlencode($lang) . '" title="' . $e($title) . '" width="100%" height="480" style="border:0;max-width:100%" loading="lazy"></iframe>',
+            '<p><a href="' . $page . '">' . $e($title) . '</a> — a free tool by <a href="' . $origin . '/" rel="nofollow">' . $e($siteName) . '</a></p>',
+            '<script>addEventListener("message",function(e){var h=Number(e.data&&e.data.seoToolHeight);if(!h)return;document.querySelectorAll(\'iframe[src^="' . $origin . '/"]\').forEach(function(f){if(f.contentWindow===e.source)f.style.height=h+"px"})})</script>',
+        ]);
+    }
+
+    /**
+     * A placeholder container plus the methodology block — the interactive kit itself ships
+     * separately and mounts into `#seo-tool-{slug}` at runtime, via `/seo-tools.js` (the site
+     * copies `public/seo-tools.js` from site-template; see the package README).
+     *
+     * `$origin`/`$siteName` default to '' so existing call sites keep compiling: on a cold store
+     * there is no origin to build an absolute embed URL from, so the "Embed this calculator"
+     * section is omitted entirely rather than emitting a broken relative iframe src.
+     */
+    public static function toolBodyHtml(array $tool, string $origin = '', string $siteName = ''): string
+    {
+        $e = fn ($s) => Sitemap::xmlEscape((string) $s);
+        $html = '<h1>' . $e($tool['kind']) . '</h1>' . self::toolPlaceholderDiv($tool);
         if (!empty($tool['methodologyHtml'])) $html .= '<div class="seo-tool-methodology">' . $tool['methodologyHtml'] . '</div>';
         if (!empty($tool['dataSource'])) {
             $html .= '<p class="seo-tool-data-source">Data source: ' . $e($tool['dataSource']) . (!empty($tool['asOf']) ? ' (as of ' . $e($tool['asOf']) . ')' : '') . '</p>';
         }
+        if ($origin !== '') {
+            $snippet = self::embedSnippet($origin, $tool['slug'], $tool['lang'], self::toolTitle($tool), $siteName);
+            $html .= '<h2>Embed this calculator</h2><textarea readonly rows="6">' . $e($snippet) . '</textarea>';
+        }
 
-        return $html;
+        return $html . '<script src="/seo-tools.js" defer></script>';
+    }
+
+    /**
+     * The iframe-able view of a tool: the calculator placeholder, a link back to the full page,
+     * the calculator bundle, and the inline ResizeObserver postMessage script — ported
+     * byte-for-byte from site-template's `app/tools/[slug]/embed/page.tsx`. `target="_top"` on
+     * the link so it navigates the host page, not the iframe.
+     */
+    public static function toolEmbedHtml(array $tool, string $canonical, string $siteName): string
+    {
+        $e = fn ($s) => Sitemap::xmlEscape((string) $s);
+
+        return self::toolPlaceholderDiv($tool)
+            . '<p><a href="' . $e($canonical) . '" target="_top">Full calculator, methodology and FAQ at ' . $e($siteName) . '</a></p>'
+            . '<script src="/seo-tools.js" defer></script>'
+            . '<script>new ResizeObserver(function(){parent.postMessage({seoToolHeight:document.documentElement.scrollHeight},\'*\')}).observe(document.body)</script>';
     }
 
     public static function verificationMetaTags(?array $v): string

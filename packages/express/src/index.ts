@@ -4,9 +4,9 @@ import {
   findAuthor, findHelpEntry, findTool, healthPayload, helpArticleJsonLd, helpBodyHtml,
   indexNowKeyFile, ingestArticles, normalizePath, personJsonLd, proxyApprovalAction, proxyPending,
   readConfig, redirectFor, resolveSeo, robotsTxt, sitemapEntries, sitemapXml, startSync,
-  submitIndexNow, submitVitals, timingSafeSecret, toolBodyHtml, toolJsonLd,
+  submitIndexNow, submitVitals, timingSafeSecret, toolBodyHtml, toolEmbedHtml, toolJsonLd,
   type ApprovalAction, type ArticlePath, type IngestOptions, type ResolvedSeo, type SeoStore,
-  RUNTIME_VERSION,
+  type Settings, RUNTIME_VERSION,
 } from '@omary98/seo-runtime-core'
 import { injectHead } from './inject.ts'
 import { seoAdminHtml } from './admin.ts'
@@ -25,6 +25,17 @@ export type ExpressSeoOptions = {
 }
 
 export const MAX_BODY_BYTES = 2 * 1024 * 1024
+
+/** The site's absolute origin for this language, or '' on a cold store (no baseUrls synced yet). */
+function originFor(settings: Settings, lang: string): string {
+  return absoluteUrl(settings, lang, '/').replace(/\/$/, '')
+}
+
+/** `settings.organization.name`, falling back to the origin's own host (embedSnippet's `siteName`). */
+function siteNameOf(settings: Settings, origin: string): string {
+  if (settings.organization?.name) return settings.organization.name
+  try { return origin ? new URL(origin).host : '' } catch { return '' }
+}
 
 /**
  * `POST /api/seo/sync` and `POST /api/articles` read their OWN bodies rather than depending on
@@ -286,7 +297,25 @@ export function seoRuntime(opts: ExpressSeoOptions) {
       const seo = await resolveSeo(opts.store, path, lang)
       const jsonld = [...seo.jsonld, toolJsonLd(tool, absoluteUrl(settings, lang, path))]
       const html = await injectHead(`<html><head></head><body></body></html>`, { ...seo, jsonld })
-      res.type('html').send(html.replace('<body></body>', `<body>${toolBodyHtml(tool)}</body>`))
+      const origin = originFor(settings, lang)
+      const body = toolBodyHtml(tool, origin ? { origin, siteName: siteNameOf(settings, origin) } : undefined)
+      res.type('html').send(html.replace('<body></body>', `<body>${body}</body>`))
+    })
+
+    // The iframe-able view of a tool: noindex + canonical to /tools/{slug} so the embed never
+    // competes with the real page for ranking. No X-Frame-Options / frame-ancestors anywhere in
+    // this package, so any origin may frame it (the browser default) — ported from
+    // site-template's app/tools/[slug]/embed/page.tsx.
+    app.get('/tools/:slug/embed', async (req, res) => {
+      const settings = (await opts.store.getSettings()) ?? EMPTY_SETTINGS
+      const lang = String(req.query.lang ?? opts.supported?.[0] ?? 'en')
+      const tool = findTool(settings, req.params.slug, lang)
+      if (!tool) { res.status(404).type('text/plain').send('not found'); return }
+      const seo = await resolveSeo(opts.store, `/tools/${tool.slug}`, lang)
+      const siteName = siteNameOf(settings, originFor(settings, lang))
+      const html = await injectHead(`<html><head></head><body></body></html>`, { ...seo, robots: { index: false, follow: true } })
+      const body = toolEmbedHtml(tool, { canonical: seo.canonical, siteName })
+      res.type('html').send(html.replace('<body></body>', `<body>${body}</body>`))
     })
 
     // 3. res.locals.seo for the site's own views, and injectHead for an SPA shell. Resolution is

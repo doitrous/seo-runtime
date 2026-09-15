@@ -242,6 +242,31 @@ test('v2: a tool page renders the placeholder container with a WebApplication JS
   assert.match(html, /"@type":"WebApplication"/)
 })
 
+test('v2: the tool page embeds a nofollowed brand link and an origin-scoped resize listener', async (t) => {
+  const { url } = await boot(t)
+  const withTool: Snapshot = { ...snapshot, settings: { ...snapshot.settings, tools: [{ slug: 'calc', lang: 'en', kind: 'Calculator', config: {}, methodologyHtml: '<p>Method.</p>', dataSource: 'ONS', asOf: '2026-08-01' }] } }
+  await fetch(`${url}/api/seo/sync`, { method: 'POST', headers: { ...authed, 'content-type': 'application/json' }, body: JSON.stringify(withTool) })
+  const html = await (await fetch(`${url}/tools/calc`)).text()
+  // The snippet lives HTML-escaped inside a <textarea readonly>, so its own quotes come back as entities.
+  assert.match(html, /rel=&quot;nofollow&quot;&gt;demo\.test&lt;\/a&gt;/)
+  assert.match(html, /iframe\[src\^=&quot;https:\/\/demo\.test\/&quot;\]/)
+  assert.match(html, /<script src="\/seo-tools\.js" defer><\/script>/)
+})
+
+test('v2: the tool embed route answers 200 with noindex,follow and the canonical /tools/{slug}, and 404s for an unknown slug', async (t) => {
+  const { url } = await boot(t)
+  const withTool: Snapshot = { ...snapshot, settings: { ...snapshot.settings, tools: [{ slug: 'calc', lang: 'en', kind: 'Calculator', config: {}, methodologyHtml: '<p>Method.</p>', dataSource: 'ONS', asOf: '2026-08-01' }] } }
+  await fetch(`${url}/api/seo/sync`, { method: 'POST', headers: { ...authed, 'content-type': 'application/json' }, body: JSON.stringify(withTool) })
+  const res = await fetch(`${url}/tools/calc/embed`)
+  assert.equal(res.status, 200)
+  const html = await res.text()
+  assert.match(html, /<meta name="robots" content="noindex, follow">/)
+  assert.match(html, /<link rel="canonical" href="https:\/\/demo\.test\/tools\/calc">/)
+  assert.match(html, /id="seo-tool-calc"/)
+  assert.match(html, /target="_top"/)
+  assert.equal((await fetch(`${url}/tools/nope/embed`)).status, 404)
+})
+
 // The mocked fetch below must discriminate by URL: the outer test request to the local test
 // server (127.0.0.1) has to reach the REAL fetch, and only the proxy's own internal call to
 // SEO_HUB_URL ('https://hub.test') is the one this suite wants to intercept.

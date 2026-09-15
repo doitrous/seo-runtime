@@ -75,6 +75,19 @@ class SeoController
         return $this->contentPage(Seo::tool($slug, $lang));
     }
 
+    /**
+     * The iframe-able view of a tool: noindex + canonical to /tools/{slug} so the embed never
+     * competes with the real page for ranking. No X-Frame-Options / frame-ancestors anywhere in
+     * this package, so any origin may frame it (the browser default) — ported from
+     * site-template's app/tools/[slug]/embed/page.tsx.
+     */
+    public function toolEmbed(Request $request, string $slug): Response
+    {
+        $lang = (string) $request->query('lang', ((array) config('seo-runtime.supported', ['en']))[0] ?? 'en');
+
+        return $this->contentPage(Seo::toolEmbed($slug, $lang));
+    }
+
     /** v2: pending/approve proxy — this site's secret in, the hub's runtime secret out. */
     public function pending()
     {
