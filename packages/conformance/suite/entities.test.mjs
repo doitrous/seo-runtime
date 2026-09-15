@@ -55,7 +55,9 @@ const withTool = { tools: [{ slug: 'calc', lang: 'en', kind: 'Calculator', confi
  */
 test('the tool page\'s "Embed this calculator" section is omitted on a cold store and present, nofollowed and origin-scoped, once one has synced', async (t) => {
   await sync(snapshotWith({ baseUrls: {}, ...withTool }))
-  const cold = await (await fetch(`${BASE}/tools/calc?lang=en`)).text()
+  // Scripts are dropped before the "undefined" check: Next's RSC flight payload legitimately
+  // carries `"$undefined"` tokens inside <script> tags, which is not a template leak.
+  const cold = (await (await fetch(`${BASE}/tools/calc?lang=en`)).text()).replace(/<script[\s\S]*?<\/script>/g, '')
   assert.ok(!cold.includes('Embed this calculator'), 'expected no embed section with no origin to build an absolute iframe src from')
   assert.ok(!cold.includes('undefined'), 'expected no literal "undefined" leaking into the body')
   assert.ok(!cold.includes('//tools'), 'expected no protocol-relative //tools from an empty origin')
