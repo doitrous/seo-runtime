@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\Facade;
  * @method static array|null author(string $slug)
  * @method static array|null helpEntry(string $slug, string $lang)
  * @method static array|null tool(string $slug, string $lang)
+ * @method static array|null toolEmbed(string $slug, string $lang)
  * @method static string|null indexNowKeyFile(string $path)
  * @method static array pending()
  * @method static array approvalAction(string $action, string $jobId, string $approvedBy, ?string $note = null)

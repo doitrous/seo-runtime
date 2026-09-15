@@ -149,6 +149,24 @@ It posts LCP/CLS/best-effort INP to this site's own `POST /api/seo/vitals` — a
 anonymous route (a real visitor's browser is not a place to keep this site's secret) — which
 attaches the secret server-side and relays the sample to the hub.
 
+## Embeddable tools
+
+`settings.tools[]` pages (`/tools/{slug}`) render a placeholder container the interactive
+calculator kit auto-initialises (`.seo-tool-placeholder[data-kind][data-config]`) — copy
+`public/seo-tools.js` from [site-template](https://github.com/doitrous/site-template) into the
+site's own `public/`; the tool page's body already loads it (`<script src="/seo-tools.js"
+defer>`).
+
+The Express and Laravel packages render the same "Embed this calculator" section below every
+tool page (once a snapshot has synced — a cold store has no origin to build an absolute iframe
+`src` from, so the section is omitted) plus a matching `GET /tools/{slug}/embed` route: the
+iframe-able view a copied snippet points at, `noindex, follow` with a canonical back to the real
+`/tools/{slug}` page so the embed never competes with it for ranking, and no
+`X-Frame-Options`/`frame-ancestors` — any origin may frame it, the browser default. Both the
+snippet format and the embed page's resize protocol are copied byte-for-byte from
+site-template's `packages/tools/embed.ts` and `app/tools/[slug]/embed/page.tsx`, so a page
+embedded from any of these sites behaves identically.
+
 ## Releasing
 
 1. Bump the version in `packages/core-js`, `packages/next`, `packages/express`,

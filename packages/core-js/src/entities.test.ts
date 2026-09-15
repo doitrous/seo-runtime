@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
-  authorBodyHtml, entityJsonLd, findAuthor, findHelpEntry, findTool, gtagSnippet, helpArticleJsonLd,
-  helpBodyHtml, indexNowKeyFile, personJsonLd, toolBodyHtml, toolJsonLd, verificationMetaTags,
-  webVitalsSnippet,
+  authorBodyHtml, embedSnippet, entityJsonLd, findAuthor, findHelpEntry, findTool, gtagSnippet,
+  helpArticleJsonLd, helpBodyHtml, indexNowKeyFile, personJsonLd, toolBodyHtml, toolEmbedHtml,
+  toolJsonLd, verificationMetaTags, webVitalsSnippet,
 } from './entities.ts'
 import { EMPTY_SETTINGS } from './types.ts'
 import type { Settings } from './types.ts'
@@ -73,6 +73,28 @@ test('toolBodyHtml renders a placeholder container and the methodology block', (
   assert.match(html, /id="seo-tool-calc"/)
   assert.match(html, /<p>Method\.<\/p>/)
   assert.match(html, /Data source: ONS/)
+  assert.match(html, /<script src="\/seo-tools\.js" defer><\/script>/)
+})
+
+test('toolBodyHtml omits the embed section on a cold store (no origin) but keeps it once one is set', () => {
+  assert.doesNotMatch(toolBodyHtml(tool), /Embed this calculator/)
+  const html = toolBodyHtml(tool, { origin: 'https://site.test', siteName: 'Site Co' })
+  assert.match(html, /Embed this calculator/)
+  assert.match(html, /<textarea readonly rows="6">/)
+})
+
+test('embedSnippet nofollows the brand link and scopes its resize listener to iframes on this origin', () => {
+  const html = embedSnippet({ origin: 'https://site.test', slug: 'calc', lang: 'en', title: 'Calculator', siteName: 'Site Co' })
+  assert.match(html, /<a href="https:\/\/site\.test\/" rel="nofollow">Site Co<\/a>/)
+  assert.match(html, /iframe\[src\^="https:\/\/site\.test\/"\]/)
+})
+
+test('toolEmbedHtml links back to the canonical page, target=_top, with the resize script', () => {
+  const html = toolEmbedHtml(tool, { canonical: 'https://site.test/tools/calc', siteName: 'Site Co' })
+  assert.match(html, /id="seo-tool-calc"/)
+  assert.match(html, /<a href="https:\/\/site\.test\/tools\/calc" target="_top">Full calculator, methodology and FAQ at Site Co<\/a>/)
+  assert.match(html, /ResizeObserver/)
+  assert.doesNotMatch(html, /Embed this calculator/)
 })
 
 test('verificationMetaTags renders only the tags that are set', () => {

@@ -72,6 +72,32 @@ class V2Test extends FacadeTestCase
         $this->assertStringContainsString('"@type":"WebApplication"', $html);
     }
 
+    public function test_the_tool_page_embeds_a_nofollowed_brand_link_and_an_origin_scoped_resize_listener(): void
+    {
+        $this->store()->putSnapshot($this->snapshotWith(['tools' => [
+            ['slug' => 'calc', 'lang' => 'en', 'kind' => 'Calculator', 'config' => [], 'methodologyHtml' => '<p>Method.</p>', 'dataSource' => 'ONS', 'asOf' => '2026-08-01'],
+        ]]));
+        $html = $this->get('/tools/calc')->assertStatus(200)->getContent();
+        // The snippet lives HTML-escaped inside a <textarea readonly>, so its own quotes come back as entities.
+        // siteName is settings.organization.name ('X Co' in the shared fixture), not the origin host.
+        $this->assertStringContainsString('rel=&quot;nofollow&quot;&gt;X Co&lt;/a&gt;', $html);
+        $this->assertStringContainsString('iframe[src^=&quot;https://x.com/&quot;]', $html);
+        $this->assertStringContainsString('<script src="/seo-tools.js" defer></script>', $html);
+    }
+
+    public function test_the_tool_embed_route_answers_200_with_noindex_follow_and_the_canonical_and_404s_for_an_unknown_slug(): void
+    {
+        $this->store()->putSnapshot($this->snapshotWith(['tools' => [
+            ['slug' => 'calc', 'lang' => 'en', 'kind' => 'Calculator', 'config' => [], 'methodologyHtml' => '<p>Method.</p>', 'dataSource' => 'ONS', 'asOf' => '2026-08-01'],
+        ]]));
+        $html = $this->get('/tools/calc/embed')->assertStatus(200)->getContent();
+        $this->assertStringContainsString('<meta name="robots" content="noindex, follow">', $html);
+        $this->assertStringContainsString('<link rel="canonical" href="https://x.com/tools/calc">', $html);
+        $this->assertStringContainsString('id="seo-tool-calc"', $html);
+        $this->assertStringContainsString('target="_top"', $html);
+        $this->get('/tools/nope/embed')->assertStatus(404);
+    }
+
     /**
      * `Seo::indexNowKeyFile()` is what `SeoRedirects::handle()` calls (see that middleware's own
      * docblock) — checked directly here, the same way `Snapshot`'s own tests exercise Support

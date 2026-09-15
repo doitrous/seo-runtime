@@ -51,3 +51,4 @@ Route::get('/seo-admin', [SeoController::class, 'admin']);
 Route::get('/authors/{slug}', [SeoController::class, 'author']);
 Route::get('/help/{slug}', [SeoController::class, 'help']);
 Route::get('/tools/{slug}', [SeoController::class, 'tool']);
+Route::get('/tools/{slug}/embed', [SeoController::class, 'toolEmbed']);

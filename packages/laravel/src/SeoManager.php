@@ -90,8 +90,41 @@ class SeoManager
         $path = "/tools/{$tool['slug']}";
         $seo = $this->resolve($path, $lang);
         $seo['jsonld'][] = Entities::toolJsonLd($tool, Snapshot::absoluteUrl($settings, $lang, $path));
+        $origin = $this->originFor($settings, $lang);
 
-        return ['bodyHtml' => Entities::toolBodyHtml($tool), 'seo' => $seo];
+        return ['bodyHtml' => Entities::toolBodyHtml($tool, $origin, $this->siteNameOf($settings, $origin)), 'seo' => $seo];
+    }
+
+    /**
+     * The iframe-able view of a tool (packages/CONTRACT.md's embed section): noindex + canonical
+     * to /tools/{slug} so the embed never competes with the real page for ranking.
+     */
+    public function toolEmbed(string $slug, string $lang): ?array
+    {
+        $settings = $this->store->getSettings() ?? Snapshot::EMPTY_SETTINGS;
+        $tool = Entities::findTool($settings, $slug, $lang);
+        if (!$tool) return null;
+        $path = "/tools/{$tool['slug']}";
+        $seo = $this->resolve($path, $lang);
+        $seo['robots'] = ['index' => false, 'follow' => true];
+        $siteName = $this->siteNameOf($settings, $this->originFor($settings, $lang));
+
+        return ['bodyHtml' => Entities::toolEmbedHtml($tool, $seo['canonical'], $siteName), 'seo' => $seo];
+    }
+
+    /** The site's absolute origin for this language, or '' on a cold store (no baseUrls synced yet). */
+    private function originFor(array $settings, string $lang): string
+    {
+        return rtrim(Snapshot::absoluteUrl($settings, $lang, '/'), '/');
+    }
+
+    /** `settings.organization.name`, falling back to the origin's own host (embedSnippet's `siteName`). */
+    private function siteNameOf(array $settings, string $origin): string
+    {
+        $name = $settings['organization']['name'] ?? '';
+        if ($name !== '') return $name;
+
+        return $origin !== '' ? (string) (parse_url($origin, PHP_URL_HOST) ?? '') : '';
     }
 
     /** `/{key}.txt` for IndexNow key verification, or null when `path` doesn't match. */
