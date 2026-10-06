@@ -4,7 +4,7 @@ Tags: seo, redirects, sitemap, robots
 Requires at least: 6.0
 Tested up to: 6.7
 Requires PHP: 8.0
-Stable tag: 0.1.0
+Stable tag: 0.1.6
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -59,6 +59,29 @@ same shape the hub sent (`title`, `bodyHtml`, `metaTitle`, `faq`, `schemaJsonld`
 
    The plugin already reads `REDIRECT_HTTP_AUTHORIZATION` and `getallheaders()` as fallbacks,
    which covers most hosts without needing the rule above.
+
+4. Low-traffic sites: the snapshot pull and health ping run on wp-cron, which only fires on
+   page visits. Add `define('DISABLE_WP_CRON', true);` to `wp-config.php` and run a real server
+   cron instead, e.g. `*/5 * * * * curl -fsS https://my-site.example/wp-cron.php?doing_wp_cron >/dev/null 2>&1`
+   (or `wp cron event run --due-now`).
+
+5. On nginx + PHP-FPM, pass the header through in the PHP `location` block:
+
+   `
+   fastcgi_param HTTP_AUTHORIZATION $http_authorization;
+   `
+
+== Receiving articles from the hub ==
+
+How the hub delivers articles depends on the site's adapter on the hub:
+
+* Adapter type `custom` with the site's root URL: the hub POSTs articles to
+  `<site URL>/api/articles` with the site's runtime secret (the same as `SEO_HUB_SECRET`), and
+  this plugin ingests and stores them. Use this when the plugin should receive the articles.
+* Adapter type `wordpress` (site URL, WordPress user, application password, category): the hub
+  creates real WordPress posts over the REST API, including Yoast/RankMath meta and hreflang.
+  Articles do not go through this plugin's `/api/articles` in this mode; the plugin only serves
+  meta/head tags, redirects, sitemap/robots and hreflang.
 
 == Frequently Asked Questions ==
 

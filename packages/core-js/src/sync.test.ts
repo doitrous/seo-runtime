@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { applySnapshot, HEALTH_INTERVAL_MS, PULL_INTERVAL_MS, sanitizeSnapshot, startSync } from './sync.ts'
-import { healthPayload, MAX_REDIRECT_HITS } from './health.ts'
+import { applySnapshot, HEALTH_INTERVAL_MS, PULL_INTERVAL_MS, pullSnapshot, sanitizeSnapshot, startSync } from './sync.ts'
+import { resetMissingSlugWarning } from './config.ts'
+import { healthPayload, MAX_REDIRECT_HITS, sendHealth } from './health.ts'
 import { EMPTY_META, EMPTY_SETTINGS, type Snapshot } from './types.ts'
 import { JsonFileStore } from './stores/json-file.ts'
 import { mkdtempSync, rmSync } from 'node:fs'
@@ -176,5 +177,19 @@ test('health reports share:false only when the integrator explicitly opts out', 
   const { store, cleanup } = tmpStore()
   assert.equal((await healthPayload(store, '0.1.0', 'x')).share, true)
   assert.equal((await healthPayload(store, '0.1.0', 'x', false)).share, false)
+  cleanup()
+})
+
+test('a cold store with no SEO_SITE_SLUG warns once per process, then stays quiet', async (t) => {
+  const { store, cleanup } = tmpStore()
+  resetMissingSlugWarning()
+  const warn = t.mock.method(console, 'warn', () => {})
+  const cfg = { hubUrl: 'https://hub.test', secret: 's', slug: '' }
+  assert.equal(await pullSnapshot(store, cfg), 'failed')
+  assert.equal(await sendHealth(store, '0.0.0', cfg), false)
+  assert.equal(await pullSnapshot(store, cfg), 'failed')
+  assert.equal(warn.mock.callCount(), 1)
+  assert.match(String(warn.mock.calls[0].arguments[0]), /SEO_SITE_SLUG/)
+  resetMissingSlugWarning()
   cleanup()
 })

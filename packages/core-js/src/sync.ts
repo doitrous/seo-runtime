@@ -1,6 +1,6 @@
 import type { SeoStore } from './store.ts'
 import type { Snapshot } from './types.ts'
-import { readConfig } from './config.ts'
+import { readConfig, warnMissingSlug } from './config.ts'
 import { safeDestination } from './redirects.ts'
 import { isSchemaOrg } from './resolve.ts'
 import { sendHealth } from './health.ts'
@@ -59,7 +59,7 @@ export async function applySnapshot(
 export async function pullSnapshot(store: SeoStore, cfg = readConfig()): Promise<'applied' | 'stale' | 'failed'> {
   if (!cfg.hubUrl || !cfg.secret) return 'failed'
   const slug = cfg.slug || (await store.getSnapshot())?.siteSlug
-  if (!slug) return 'failed'
+  if (!slug) { warnMissingSlug(); return 'failed' }
   try {
     const res = await fetch(`${cfg.hubUrl}/api/sites/${encodeURIComponent(slug)}/snapshot`, {
       headers: { Authorization: `Bearer ${cfg.secret}` },
