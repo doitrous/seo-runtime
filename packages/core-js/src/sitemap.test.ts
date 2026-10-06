@@ -147,3 +147,11 @@ test('the kill switch disallows everything and lists no sitemap', () => {
 test('with no snapshot robots allows everything and lists nothing', () => {
   assert.equal(robotsTxt(null).trim(), 'User-agent: *\nAllow: /')
 })
+
+test('an article the hub already lists as a snapshot page appears once, and a noindexed one not at all', () => {
+  const asPage = page({ key: 'article:9:en', type: 'article', path: '/en/blog/hair', group: 'article:9' })
+  const entries = sitemapEntries(snap({ pages: [asPage] }), [article(), article({ lang: 'ar', slug: 'hair-ar' })])
+  assert.deepEqual(entries.map((e) => e.loc), ['https://x.com/en/blog/hair', 'https://x.com/ar/blog/hair-ar'])
+  const hidden = page({ ...asPage, seo: { ...seo, index: false } })
+  assert.deepEqual(sitemapEntries(snap({ pages: [hidden] }), [article()]).map((e) => e.loc), [])
+})

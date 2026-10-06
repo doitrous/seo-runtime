@@ -57,9 +57,14 @@ function doitrous_seo_sitemap_entries(array $snapshot, array $articles): array {
     $byJob = [];
     foreach ($articles as $a) $byJob[$a['externalId']][] = $a;
     $urlOf = fn (array $a) => doitrous_seo_absolute_url($s, $a['lang'], doitrous_seo_article_version_path($a));
+    // The hub registers every published article as a snapshot page too; when it has, the page is
+    // the entry (or, when noindexed, the reason there is none), so the article is skipped.
+    $described = [];
+    foreach ($snapshot['pages'] as $p) $described[rtrim(doitrous_seo_absolute_url($s, $p['lang'], $p['path']), '/')] = true;
     foreach ($byJob as $group) {
         $alternates = doitrous_seo_article_hreflang(doitrous_seo_source_first($group), $urlOf, doitrous_seo_is_legacy_group($group));
         foreach ($group as $a) {
+            if (isset($described[rtrim($urlOf($a), '/')])) continue;
             $out[] = [
                 'loc' => $urlOf($a),
                 'lastmod' => doitrous_seo_sitemap_lastmod($a['updatedAt']),

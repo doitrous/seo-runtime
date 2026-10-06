@@ -60,9 +60,14 @@ class Sitemap
         foreach ($articles as $a) $byJob[$a['externalId']][] = $a;
         $articleDefaults = $s['pageDefaults']['article'] ?? Snapshot::DEFAULT_PAGE_DEFAULTS;
         $urlOf = fn (array $a) => Snapshot::absoluteUrl($s, $a['lang'], Locale::versionPath($a));
+        // The hub registers every published article as a snapshot page too; when it has, the page
+        // is the entry (or, when noindexed, the reason there is none), so the article is skipped.
+        $described = [];
+        foreach ($snapshot['pages'] as $p) $described[rtrim(Snapshot::absoluteUrl($s, $p['lang'], $p['path']), '/')] = true;
         foreach ($byJob as $group) {
             $alternates = Locale::hreflang(self::sourceFirst($group), $urlOf, self::isLegacyGroup($group));
             foreach ($group as $a) {
+                if (isset($described[rtrim($urlOf($a), '/')])) continue;
                 $out[] = [
                     'loc' => $urlOf($a),
                     'lastmod' => self::day($a['updatedAt']),
