@@ -1,5 +1,5 @@
 import type { SeoStore } from './store.ts'
-import { readConfig } from './config.ts'
+import { readConfig, warnMissingSlug } from './config.ts'
 import { storeFailures } from './resolve.ts'
 
 /** The hub rejects a health body with more redirect entries than this (400). */
@@ -53,7 +53,7 @@ export async function sendHealth(store: SeoStore, version: string, cfg = readCon
   if (!cfg.hubUrl || !cfg.secret) return false
   try {
     const body = await healthPayload(store, version, cfg.slug, share)
-    if (!body.siteSlug) return false   // nothing to address the hub with yet
+    if (!body.siteSlug) { warnMissingSlug(); return false }   // nothing to address the hub with yet
     const res = await fetch(`${cfg.hubUrl}/api/runtime/health`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.secret}` },

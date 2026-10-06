@@ -13,13 +13,34 @@ seo-hub runtime for the Next.js App Router: metadata, sitemap, robots, redirects
     import { store } from './store'
 
     export const seo = createSeo({
-      store, supported: ['en', 'ar'], version: '0.1.2',
+      store, supported: ['en', 'ar'],
       pages: async () => [{ key: 'home', type: 'page', lang: 'en', path: '/en', title: 'Home', updatedAt: '...' }],
     })
 
 Wire `seo.handlers` at `app/api/seo/[...seo]/route.ts`, `seo.articleHandler` at
 `app/api/articles/route.ts`, `seo.sitemapResponse`/`seo.robots` at `app/sitemap.xml/route.ts` and
 `app/robots.txt/route.ts`, and `seo.metadata`/`seo.resolve` from a page's `generateMetadata`.
+
+## Start the sync (required)
+
+`createSeo` alone never talks to the hub. Without `seo.start()` the site never pulls a snapshot
+(the first page of SEO data, redirects and sitemap entries all come from it) and never pings
+health, so the hub shows the site as unsynced. Call it once per server process from
+`instrumentation.ts` in the Node runtime only (the proxy/edge runtime must not run it):
+
+    // instrumentation.ts (project root, next to app/)
+    export async function register() {
+      if (process.env.NEXT_RUNTIME === 'nodejs') {
+        const { seo } = await import('./lib/seo')
+        seo.start()
+      }
+    }
+
+`seo.start()` pulls and pings once immediately, then pulls every 6 h and pings health hourly (the
+timers are unref'd). It reads `SEO_HUB_URL`, `SEO_HUB_SECRET` and, until the first snapshot has
+synced, `SEO_SITE_SLUG`. `examples/next-demo/lib/seo.ts` calls it at module scope instead, which
+also works but only runs once some route imports `lib/seo`; `register()` runs at server boot.
+The reported version defaults to the package's own version; don't pass `version` yourself.
 
 ## `proxy.ts`
 

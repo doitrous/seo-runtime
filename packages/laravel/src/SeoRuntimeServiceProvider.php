@@ -35,13 +35,14 @@ class SeoRuntimeServiceProvider extends ServiceProvider
         // CONTRACT/ticket: the first pull happens on boot, not by a manual `artisan` command.
         // Guarded so PHPUnit and `artisan` commands (migrate, tinker, the scheduler itself) never
         // trigger it, and so it only ever fires once — `snapshot()` is non-null after the first
-        // successful pull, so every boot after that is a single cheap read, not a network call.
+        // successful pull, so every boot after that is a single cheap read, not a network call. A failed pull is
+        // backed off for 5 minutes (SeoManager::pullOnBoot) so a down hub can't stall every request.
         // `runningInConsole()` is false for `php artisan serve`-served requests (SAPI `cli-server`,
         // not `cli`), which is exactly the boot this replaces the manual `seo-runtime:pull` for.
         $this->app->booted(function () {
             if ($this->app->runningInConsole() || $this->app->runningUnitTests()) return;
             $manager = $this->app->make(SeoManager::class);
-            if (!$manager->snapshot()) $manager->pull();
+            $manager->pullOnBoot();
         });
 
         // CONTRACT: pull every 6 h thereafter, health hourly. Registered here so a host app only

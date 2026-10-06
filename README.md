@@ -1,6 +1,6 @@
 # seo-runtime
 
-Per-stack SEO runtimes for the [seo-hub](https://github.com/omary98/seohub) platform. The hub
+Per-stack SEO runtimes for the [seo-hub](https://github.com/doitrous/seohub) platform. The hub
 decides page SEO, redirects, sitemap and robots; these packages pull that decision into a local
 store and render it — rendering never talks to the network. See `packages/CONTRACT.md` for the
 behaviour every package implements and `packages/conformance/` for the suite that proves it.
@@ -76,7 +76,7 @@ Composer resolves the package straight from this repository's VCS tag — no sep
 publish:
 
 ```
-composer config repositories.seo-runtime vcs https://github.com/omary98/seo-runtime
+composer config repositories.seo-runtime vcs https://github.com/doitrous/seo-runtime
 composer require doitrous/seo-runtime-laravel:^0.1
 ```
 
@@ -113,6 +113,44 @@ trigger it) — `php artisan seo-runtime:pull` still exists if you want to pull 
    ```
    SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
    ```
+
+4. Low-traffic sites: the six-hourly snapshot pull and the health ping run on wp-cron, which only
+   fires when someone visits. Disable the visit-triggered cron and run a real one instead:
+
+   ```php
+   define('DISABLE_WP_CRON', true);   // wp-config.php
+   ```
+
+   ```
+   */5 * * * * curl -fsS https://my-site.example/wp-cron.php?doing_wp_cron >/dev/null 2>&1
+   ```
+
+   (or `*/5 * * * * cd /path/to/wordpress && wp cron event run --due-now`).
+
+5. nginx + PHP-FPM has the same stripped-`Authorization` problem as Apache. Pass the header
+   through in the `location ~ \.php$` block:
+
+   ```
+   fastcgi_param HTTP_AUTHORIZATION $http_authorization;
+   ```
+
+### Receiving articles from the hub
+
+The plugin accepts the hub's `POST /api/articles`, but whether the hub sends articles that way
+depends on the adapter the site is configured with on the hub (Dashboard → site → adapter).
+Pick one:
+
+- **Adapter type `custom`, URL = the site's root URL.** The hub POSTs every language version to
+  `<site URL>/api/articles` with this site's runtime secret (the same `SEO_HUB_SECRET` the plugin
+  already has). The plugin stores the article in its own table and lists it in the sitemap; the
+  theme renders the page (`doitrous_seo_find_article_by_slug()`). A 404/405 from the hub's job
+  page means the plugin is not active or the URL is wrong; a 401/403 means the secret differs.
+- **Adapter type `wordpress` (site URL, WordPress user, application password, category).** The
+  hub publishes real WordPress posts over the REST API (`/wp-json/wp/v2`), writing the
+  Yoast/RankMath meta and a per-post hreflang map. Articles do **not** go through the plugin's
+  `/api/articles` here, so in this mode the plugin only serves meta/head tags, redirects,
+  sitemap/robots and hreflang for what WordPress already owns. Create the application password
+  under Users → your admin user → Application Passwords.
 
 ## IndexNow and the web-vitals beacon
 

@@ -12,6 +12,13 @@ class SeoManager
 {
     public const VERSION = '0.1.6';
 
+    /** Hub calls must never hang a request: 5 s to connect, 10 s in total. */
+    public const HUB_CONNECT_TIMEOUT = 5;
+    public const HUB_TIMEOUT = 10;
+    /** After a failed boot pull, don't try again from a request for this many seconds. */
+    public const BOOT_PULL_BACKOFF = 300;
+    private const BOOT_PULL_FAILED_KEY = 'seo-runtime:boot-pull-failed-at';
+
     public function __construct(private EloquentStore $store) {}
 
     public function snapshot(): ?array { return $this->store->getSnapshot(); }
@@ -190,7 +197,7 @@ class SeoManager
         $body = $this->health();
         if ($body['siteSlug'] === '') return false;
         try {
-            $res = \Illuminate\Support\Facades\Http::withToken($secret)->post("$hub/api/runtime/health", $body);
+            $res = \Illuminate\Support\Facades\Http::withToken($secret)->connectTimeout(self::HUB_CONNECT_TIMEOUT)->timeout(self::HUB_TIMEOUT)->post("$hub/api/runtime/health", $body);
             if (!$res->successful()) return false;
             $this->store->takeHits($body['redirectHits']);
 
@@ -282,7 +289,7 @@ class SeoManager
         $slug = $this->slugForProxy();
         if ($hub === '' || $secret === '' || $slug === '') return ['status' => 502, 'body' => ['error' => 'misconfigured']];
         try {
-            $req = \Illuminate\Support\Facades\Http::withToken($secret);
+            $req = \Illuminate\Support\Facades\Http::withToken($secret)->connectTimeout(self::HUB_CONNECT_TIMEOUT)->timeout(self::HUB_TIMEOUT);
             $res = $method === 'get' ? $req->get("$hub$path") : $req->post("$hub$path", $body);
 
             return ['status' => $res->status(), 'body' => $res->json() ?? $res->body()];
@@ -301,7 +308,7 @@ class SeoManager
         $slug = (string) config('seo-runtime.slug', '') ?: ($this->store->getSnapshot()['siteSlug'] ?? '');
         if ($hub === '' || $secret === '' || $slug === '') return 'failed';
         try {
-            $res = \Illuminate\Support\Facades\Http::withToken($secret)->get("$hub/api/sites/" . urlencode($slug) . '/snapshot');
+            $res = \Illuminate\Support\Facades\Http::withToken($secret)->connectTimeout(self::HUB_CONNECT_TIMEOUT)->timeout(self::HUB_TIMEOUT)->get("$hub/api/sites/" . urlencode($slug) . '/snapshot');
             if (!$res->successful()) return 'failed';
             $out = $this->apply($res->json());
 
@@ -311,5 +318,29 @@ class SeoManager
 
             return 'failed';
         }
+    }
+
+    /**
+     * The pull a web request triggers when nothing has synced yet. Runs in the request, so a down
+     * hub must not cost every request a timeout: a failure is remembered (cache) and the next
+     * attempt waits BOOT_PULL_BACKOFF seconds. The scheduled pull is not affected. A cache that
+     * is itself unavailable degrades to "no backoff" rather than an error.
+     */
+    public function pullOnBoot(): ?string
+    {
+        if ($this->snapshot()) return null;
+        try {
+            if (\Illuminate\Support\Facades\Cache::get(self::BOOT_PULL_FAILED_KEY) !== null) return null;
+        } catch (\Throwable $e) {
+        }
+        $out = $this->pull();
+        if ($out === 'failed') {
+            try {
+                \Illuminate\Support\Facades\Cache::put(self::BOOT_PULL_FAILED_KEY, time(), self::BOOT_PULL_BACKOFF);
+            } catch (\Throwable $e) {
+            }
+        }
+
+        return $out;
     }
 }
