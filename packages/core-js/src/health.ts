@@ -11,7 +11,16 @@ export type HealthBody = {
   redirectHits: { source: string; hits: number }[]
   /** True when the share block (entities.ts's `shareBlockHtml`) is wired into this site's content pages. */
   share: boolean
+  /**
+   * Capabilities the hub may rely on. `localeUrls` (0.2.0, hub contract 1.20.0): this runtime
+   * serves per-country versions of one language (`/ar-ae/blog/x`) and computes their hreflang,
+   * so the hub may send several items per language once the site's `localeUrls` flag is on.
+   */
+  features: string[]
 }
+
+/** What this runtime advertises on the health ping (`features`). */
+export const RUNTIME_FEATURES: readonly string[] = ['localeUrls']
 
 /**
  * Read-only. It does NOT drain the hit counters — `sendHealth` does that, and only after the hub
@@ -41,6 +50,7 @@ export async function healthPayload(store: SeoStore, version: string, slug: stri
     redirectHits: hits.filter((h) => Number.isFinite(h.hits) && h.hits > 0)
       .sort((a, b) => b.hits - a.hits).slice(0, MAX_REDIRECT_HITS),
     share,
+    features: [...RUNTIME_FEATURES],
   }
 }
 

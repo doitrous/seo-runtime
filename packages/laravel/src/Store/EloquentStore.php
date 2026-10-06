@@ -2,6 +2,7 @@
 
 namespace Doitrous\SeoRuntime\Store;
 
+use Doitrous\SeoRuntime\Support\Locale;
 use Doitrous\SeoRuntime\Support\Snapshot;
 use Illuminate\Support\Facades\DB;
 
@@ -120,9 +121,24 @@ class EloquentStore
         return $q->get()->map(fn ($r) => $this->toArticle($r))->all();
     }
 
-    public function findArticleBySlug(string $lang, string $slug): ?array
+    /** Every stored version of one externalId (0.2.0). */
+    public function listArticleVersions(int $externalId): array
     {
-        $row = DB::table('seo_runtime_articles')->where('lang', $lang)->where('slug', $slug)->first();
+        return DB::table('seo_runtime_articles')->where('external_id', $externalId)
+            ->get()->map(fn ($r) => $this->toArticle($r))->all();
+    }
+
+    /**
+     * Lookup and the 409's collision check. A plain language (`ar`) resolves to that language's
+     * lead; a locale (`ar-AE`, `ar-ae`) to the version stored under it. The lead is tried first,
+     * so a site whose supported list carries a region-coded language (`pt-BR`) still finds it.
+     */
+    public function findArticleBySlug(string $langOrLocale, string $slug): ?array
+    {
+        $row = DB::table('seo_runtime_articles')->where('slug', $slug)->where('is_lead', true)
+            ->whereRaw('LOWER(lang) = ?', [strtolower($langOrLocale)])->first()
+            ?? DB::table('seo_runtime_articles')->where('slug', $slug)
+                ->where('locale', Locale::canonical($langOrLocale))->first();
 
         return $row ? $this->toArticle($row) : null;
     }
@@ -138,29 +154,49 @@ class EloquentStore
             'authorName' => $r->author_name, 'authorCredentials' => $r->author_credentials,
             'references' => $this->json($r->refs), 'og' => $this->json($r->og, (object) []),
             'extra' => $this->json($r->extra), 'publishedAt' => $r->published_at, 'updatedAt' => $r->updated_at,
+            // 0.2.0. A row migrated from 0.1.x has locale = lang, is_lead = 1, no hreflang.
+            'locale' => ($r->locale ?? '') !== '' ? $r->locale : $r->lang,
+            'lead' => (bool) ($r->is_lead ?? true),
+            'hreflang' => $this->json($r->hreflang ?? null),
         ];
     }
 
+    /**
+     * Keyed by (externalId, locale). A lead instead replaces its language's lead whatever that
+     * row's locale (so a 0.1.x row keyed by language is updated in place, never duplicated, when
+     * the hub starts sending `locale`), and absorbs a non-lead row stored under its locale.
+     */
     public function upsertArticle(array $a): array
     {
-        $existing = DB::table('seo_runtime_articles')
-            ->where('external_id', $a['externalId'])->where('lang', $a['lang'])->first();
+        $locale = Locale::localeOf($a);
+        $lead = Locale::isLead($a);
+        $q = fn () => DB::table('seo_runtime_articles')->where('external_id', $a['externalId']);
+        if ($lead) {
+            $q()->where('locale', $locale)->where('is_lead', false)->delete();
+            $existing = $q()->where('lang', $a['lang'])->where('is_lead', true)->first();
+        } else {
+            $existing = $q()->where('locale', $locale)->where('is_lead', false)->first();
+        }
         $a['publishedAt'] = $existing ? $existing->published_at : $a['publishedAt'];
-        DB::table('seo_runtime_articles')->updateOrInsert(
-            ['external_id' => $a['externalId'], 'lang' => $a['lang']],
-            [
-                'slug' => $a['slug'], 'title' => $a['title'], 'meta_title' => $a['metaTitle'],
-                'meta_description' => $a['metaDescription'], 'body_md' => $a['bodyMd'], 'body_html' => $a['bodyHtml'],
-                'faq' => json_encode($a['faq']), 'schema_jsonld' => json_encode($a['schemaJsonld']),
-                'image_url' => $a['imageUrl'], 'image_alt' => $a['imageAlt'],
-                'author_name' => $a['authorName'], 'author_credentials' => $a['authorCredentials'],
-                'refs' => json_encode($a['references']), 'og' => json_encode($a['og']),
-                'extra' => json_encode($a['extra']),
-                'published_at' => $a['publishedAt'], 'updated_at' => $a['updatedAt'],
-            ],
-        );
+        $values = [
+            'slug' => $a['slug'], 'title' => $a['title'], 'meta_title' => $a['metaTitle'],
+            'meta_description' => $a['metaDescription'], 'body_md' => $a['bodyMd'], 'body_html' => $a['bodyHtml'],
+            'faq' => json_encode($a['faq']), 'schema_jsonld' => json_encode($a['schemaJsonld']),
+            'image_url' => $a['imageUrl'], 'image_alt' => $a['imageAlt'],
+            'author_name' => $a['authorName'], 'author_credentials' => $a['authorCredentials'],
+            'refs' => json_encode($a['references']), 'og' => json_encode($a['og']),
+            'extra' => json_encode($a['extra']),
+            'published_at' => $a['publishedAt'], 'updated_at' => $a['updatedAt'],
+            'locale' => $locale, 'is_lead' => $lead,
+            'hreflang' => json_encode((object) ($a['hreflang'] ?? [])),
+        ];
+        if ($existing) {
+            $q()->where('locale', $existing->locale ?? $existing->lang ?? $a['lang'])->where('lang', $a['lang'])->update($values);
+        } else {
+            DB::table('seo_runtime_articles')->insert($values + ['external_id' => $a['externalId'], 'lang' => $a['lang']]);
+        }
 
-        return $a;
+        return array_merge($a, ['locale' => $locale, 'lead' => $lead]);
     }
 
     public function incrementHit(string $source): void

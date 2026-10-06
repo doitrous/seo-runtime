@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Doitrous SEO
  * Description: seo-hub runtime for WordPress. The hub decides page SEO, redirects, sitemap and robots; this plugin renders them.
- * Version: 0.1.6
+ * Version: 0.2.0
  * Requires at least: 6.0
  * Requires PHP: 8.0
  *
@@ -21,13 +21,13 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('DOITROUS_SEO_VERSION', '0.1.6');
+define('DOITROUS_SEO_VERSION', '0.2.0');
 define('DOITROUS_SEO_DIR', plugin_dir_path(__FILE__));
 define('DOITROUS_SEO_MAX_BODY', 2 * 1024 * 1024);
 
 // redirects.php, sitemap.php and articles.php ship in B12b; file_exists keeps this plugin
 // bootable with only the four B12 files present, and B12b needs no change here at all.
-foreach (['store', 'resolve', 'entities', 'approval', 'redirects', 'sitemap', 'articles', 'head', 'routes'] as $part) {
+foreach (['store', 'locale', 'resolve', 'entities', 'approval', 'redirects', 'sitemap', 'articles', 'head', 'routes'] as $part) {
     $file = DOITROUS_SEO_DIR . "includes/$part.php";
     if (file_exists($file)) require_once $file;
 }
@@ -59,6 +59,11 @@ function doitrous_seo_config(): array {
 function doitrous_seo_article_path(string $lang, string $slug): string {
     return (string) apply_filters('doitrous_seo_article_path', "/$lang/blog/$slug", $lang, $slug);
 }
+
+// Plugin updates never re-run the activation hook, so the 0.2.0 articles-table upgrade (locale
+// column, re-keyed to (external_id, locale)) is checked once per request against a stored schema
+// version — a single autoloaded option read when there is nothing to do.
+add_action('plugins_loaded', 'doitrous_seo_maybe_upgrade_db');
 
 add_action('init', 'doitrous_seo_register_routes', 0);
 if (function_exists('doitrous_seo_register_admin_menu')) {

@@ -54,26 +54,51 @@ class Sitemap
         }
 
         // Grouped by external id, not slug: two jobs may reuse a slug in different languages and
-        // must not become each other's alternates.
-        $articlePath = Articles::articlePath();
+        // must not become each other's alternates. One entry per stored version (per locale,
+        // 0.2.0), each carrying the full hreflang set of its externalId.
         $byJob = [];
         foreach ($articles as $a) $byJob[$a['externalId']][] = $a;
         $articleDefaults = $s['pageDefaults']['article'] ?? Snapshot::DEFAULT_PAGE_DEFAULTS;
+        $urlOf = fn (array $a) => Snapshot::absoluteUrl($s, $a['lang'], Locale::versionPath($a));
         foreach ($byJob as $group) {
-            $alternates = [];
-            foreach ($group as $a) $alternates[$a['lang']] = Snapshot::absoluteUrl($s, $a['lang'], $articlePath($a['lang'], $a['slug']));
+            $alternates = Locale::hreflang(self::sourceFirst($group), $urlOf, self::isLegacyGroup($group));
             foreach ($group as $a) {
                 $out[] = [
-                    'loc' => Snapshot::absoluteUrl($s, $a['lang'], $articlePath($a['lang'], $a['slug'])),
+                    'loc' => $urlOf($a),
                     'lastmod' => self::day($a['updatedAt']),
                     'changefreq' => $articleDefaults['changefreq'],
                     'priority' => $articleDefaults['priority'],
-                    'alternates' => self::withDefault($alternates),
+                    'alternates' => $alternates,
                 ];
             }
         }
 
         return $out;
+    }
+
+    /** Every version under its own language code (what 0.1.x stored): 0.1.6's x-default rule. */
+    private static function isLegacyGroup(array $group): bool
+    {
+        foreach ($group as $a) if (Locale::localeOf($a) !== $a['lang']) return false;
+
+        return true;
+    }
+
+    /** The source version first (recovered from the x-default stored at ingest), for x-default. */
+    private static function sourceFirst(array $group): array
+    {
+        $xd = null;
+        foreach ($group as $a) if (!empty($a['hreflang']['x-default'])) { $xd = $a['hreflang']['x-default']; break; }
+        if ($xd === null) return $group;
+        foreach ($group as $i => $a) {
+            if (($a['hreflang'][Locale::localeOf($a)] ?? null) === $xd && $i > 0) {
+                unset($group[$i]);
+
+                return array_merge([$a], array_values($group));
+            }
+        }
+
+        return $group;
     }
 
     public static function urlset(array $entries): string

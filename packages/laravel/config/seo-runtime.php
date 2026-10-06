@@ -15,6 +15,13 @@ return [
     // Null means /{lang}/blog/{slug}.
     'article_path' => null,
 
+    // Per-country pages (0.2.0): where a non-lead version of a language is served,
+    // fn (string $locale, string $slug): string with $locale canonical (`ar-AE`). Null means
+    // article_path with the language segment replaced by the lowercase locale
+    // (/ar/blog/x → /ar-ae/blog/x), or /<locale> prepended to an unprefixed language. The lead
+    // (first) version of each language always stays at article_path.
+    'article_locale_path' => null,
+
     // Optional: a callable that takes over article storage entirely. It receives the validated
     // hub payload and returns ['results' => [...], 'skipped' => [...]] plus, optionally, a
     // 'status' the route answers with — that is how a site keeps its own 409 or 422.

@@ -1,6 +1,7 @@
 import type { ArticlePath, Snapshot, StoredArticle } from './types.ts'
 import { DEFAULT_ARTICLE_PATH, DEFAULT_PAGE_DEFAULTS } from './types.ts'
 import { absoluteUrl } from './resolve.ts'
+import { articleHreflang, articleVersionPath, localeOf, withVersionDefaults, type ArticleLocalePath } from './locale.ts'
 
 // The per-file URL limit from the contract. The sitemap index that would split a bigger site
 // across /sitemap-1.xml, /sitemap-2.xml, ... is deferred to phase 2 (controller ruling for this
@@ -40,6 +41,7 @@ function withDefault(alternates: Record<string, string>): Record<string, string>
  */
 export function sitemapEntries(
   snapshot: Snapshot, articles: StoredArticle[], articlePath: ArticlePath = DEFAULT_ARTICLE_PATH,
+  articleLocalePath?: ArticleLocalePath,
 ): SitemapEntry[] {
   if (!snapshot.settings.indexingEnabled) return []
   const s = snapshot.settings
@@ -66,28 +68,52 @@ export function sitemapEntries(
   }
 
   // Grouped by external id, not slug: two different jobs may use the same slug in different
-  // languages and must not become each other's alternates.
+  // languages and must not become each other's alternates. One <url> per stored version (per
+  // locale, 0.2.0), each carrying the full hreflang set of its externalId.
   const byJob = new Map<number, StoredArticle[]>()
-  for (const a of articles) {
+  for (const raw of articles) {
+    const a = withVersionDefaults(raw)
     const g = byJob.get(a.externalId) ?? []
     g.push(a)
     byJob.set(a.externalId, g)
   }
+  const urlOf = (a: StoredArticle) => absoluteUrl(s, a.lang, articleVersionPath(a, articlePath, articleLocalePath))
   for (const group of byJob.values()) {
-    const alternates: Record<string, string> = {}
-    for (const a of group) alternates[a.lang] = absoluteUrl(s, a.lang, articlePath(a.lang, a.slug))
+    const alternates = articleHreflang(sourceFirst(group), urlOf, isLegacyGroup(group))
     for (const a of group) {
       out.push({
-        loc: absoluteUrl(s, a.lang, articlePath(a.lang, a.slug)), lastmod: day(a.updatedAt),
+        loc: urlOf(a), lastmod: day(a.updatedAt),
         changefreq: (s.pageDefaults.article ?? DEFAULT_PAGE_DEFAULTS).changefreq,
         // Same fallback chain as a page: the type default, then DEFAULT_PAGE_DEFAULTS.priority.
         // No per-type magic number.
         priority: (s.pageDefaults.article ?? DEFAULT_PAGE_DEFAULTS).priority,
-        alternates: withDefault(alternates),
+        alternates,
       })
     }
   }
   return out
+}
+
+/**
+ * Every version stored under its own language code (no region anywhere) — what 0.1.x stored, and
+ * what a payload without `locale` still stores. Such a group keeps 0.1.6's x-default rule (`en`,
+ * else the first language) so its sitemap does not change by a byte.
+ */
+function isLegacyGroup(group: StoredArticle[]): boolean {
+  return group.every((a) => localeOf(a) === a.lang)
+}
+
+/**
+ * The source version first, so `x-default` points at it. The ingest that stored the group wrote
+ * its own `x-default` into every row's `hreflang`; the version whose own stored URL is that
+ * x-default is the source. URLs are recomputed here at render (the site's base URLs may have
+ * changed since ingest) — the stored map is only used to recover which version came first.
+ */
+function sourceFirst(group: StoredArticle[]): StoredArticle[] {
+  const xd = group.map((a) => a.hreflang?.['x-default']).find(Boolean)
+  if (!xd) return group
+  const i = group.findIndex((a) => a.hreflang?.[localeOf(a)] === xd)
+  return i > 0 ? [group[i], ...group.slice(0, i), ...group.slice(i + 1)] : group
 }
 
 export function sitemapXml(entries: SitemapEntry[]): string {

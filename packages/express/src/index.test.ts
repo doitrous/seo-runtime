@@ -473,3 +473,45 @@ test('v2: the IndexNow key file is served at /{key}.txt with the key as the body
   assert.equal((await res.text()).trim(), 'abc123def')
   assert.equal((await fetch(`${url}/other.txt`)).status, 404)
 })
+
+test('0.2.0: per-country versions ingest, list, sitemap, and resolve on a host /:lang/blog/:slug route', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'express-locale-'))
+  const store = new JsonFileStore(join(dir, 'state.json'))
+  const app = express()
+  seoRuntime({ store, pages: async () => [], supported: ['en', 'ar'], version: '0.2.0' })(app)
+  // The host's own article view: `req.params.lang` receives `ar` and `ar-ae` alike.
+  app.get('/:lang/blog/:slug', async (req, res) => {
+    const a = await res.locals.getArticle(req.params.lang, req.params.slug)
+    if (!a) { res.status(404).send('nf'); return }
+    res.json({ title: a.title, locale: a.locale, href: res.locals.articleHref(a), hreflang: a.hreflang })
+  })
+  const server = http.createServer(app)
+  t.after(() => new Promise<void>((r) => { server.close(() => r()); rmSync(dir, { recursive: true, force: true }) }))
+  const url = await new Promise<string>((resolve) => server.listen(0, () => resolve(`http://127.0.0.1:${(server.address() as { port: number }).port}`)))
+  const h = { ...authed, 'content-type': 'application/json' }
+  await fetch(`${url}/api/seo/sync`, { method: 'POST', headers: h, body: JSON.stringify(snapshot) })
+  const ingest = await fetch(`${url}/api/articles`, {
+    method: 'POST', headers: h, body: JSON.stringify({ externalId: 9, articles: [
+      { lang: 'ar', locale: 'ar-SA', title: 'SA', slug: 'hair', bodyMd: 'x' },
+      { lang: 'ar', locale: 'ar-AE', title: 'AE', slug: 'hair', bodyMd: 'x' },
+    ] }),
+  })
+  assert.deepEqual((await ingest.json() as { results: unknown[] }).results, [
+    { lang: 'ar', locale: 'ar-SA', remoteId: '9:ar', remoteUrl: 'https://demo.test/ar/blog/hair' },
+    { lang: 'ar', locale: 'ar-AE', remoteId: '9:ar-AE', remoteUrl: 'https://demo.test/ar-ae/blog/hair' },
+  ])
+  const ae = await (await fetch(`${url}/ar-ae/blog/hair`)).json() as { title: string; href: string; hreflang: Record<string, string> }
+  assert.equal(ae.title, 'AE')
+  assert.equal(ae.href, '/ar-ae/blog/hair')
+  assert.equal(ae.hreflang.ar, 'https://demo.test/ar/blog/hair')
+  assert.equal(ae.hreflang['x-default'], 'https://demo.test/ar/blog/hair')
+  assert.equal((await (await fetch(`${url}/ar/blog/hair`)).json() as { title: string }).title, 'SA')
+  assert.equal((await fetch(`${url}/ar-sa/blog/hair`)).status, 404)
+  const pages = await (await fetch(`${url}/api/seo/pages`, { headers: authed })).json() as { pages: { key: string; path: string }[] }
+  assert.deepEqual(pages.pages.map((p) => [p.key, p.path]), [['article:9', '/ar/blog/hair'], ['article:9:ar-AE', '/ar-ae/blog/hair']])
+  const xml = await (await fetch(`${url}/sitemap.xml`)).text()
+  assert.match(xml, /<loc>https:\/\/demo\.test\/ar-ae\/blog\/hair<\/loc>/)
+  assert.match(xml, /hreflang="ar-AE" href="https:\/\/demo\.test\/ar-ae\/blog\/hair"/)
+  const health = await (await fetch(`${url}/api/seo/health`, { headers: authed })).json() as { features: string[] }
+  assert.deepEqual(health.features, ['localeUrls'])
+})

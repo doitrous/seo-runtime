@@ -8,3 +8,5 @@
  * `@omary98/seo-runtime-next/edge` instead never reaches `index.ts` at all.
  */
 export { withSeoRedirects } from './redirects.ts'
+// Per-country pages (0.2.0): pure path parsing, safe in a proxy (`@omary98/seo-runtime-core/edge`).
+export { parseLocalePrefix, canonicalLocale, langOfLocale, type LocalePrefix } from '@omary98/seo-runtime-core/edge'

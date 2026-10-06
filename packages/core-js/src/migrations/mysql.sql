@@ -38,7 +38,13 @@ CREATE TABLE IF NOT EXISTS seo_runtime_articles (
   -- plannedUpdateAt, secondaryKeywords, searchIntent, sections, introduction).
   extra JSON NOT NULL,
   published_at VARCHAR(191) NOT NULL DEFAULT '', updated_at VARCHAR(191) NOT NULL DEFAULT '',
-  PRIMARY KEY (external_id, lang),
-  -- findArticleBySlug() runs on every ingest, to answer the 409.
-  KEY seo_runtime_articles_slug (lang, slug)
+  -- 0.2.0, per-country pages: one row per (externalId, locale). `locale` is the canonical locale
+  -- (ar-AE), or the language for a row with none, `is_lead` marks the first version of its
+  -- language, which keeps articlePath(lang, slug), `hreflang` is computed at ingest (nullable:
+  -- a JSON column cannot carry a literal default on every MySQL this runs on).
+  locale VARCHAR(191) NOT NULL, is_lead TINYINT(1) NOT NULL DEFAULT 1, hreflang JSON NULL,
+  PRIMARY KEY (external_id, locale),
+  -- findArticleBySlug() runs on every ingest, to answer the 409, and on every article view.
+  KEY seo_runtime_articles_slug (lang, slug),
+  KEY seo_runtime_articles_locale_slug (locale, slug)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

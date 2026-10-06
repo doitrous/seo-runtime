@@ -290,12 +290,14 @@ class Snapshot
     {
         $provider = config('seo-runtime.pages');
         $pages = is_callable($provider) ? (array) $provider() : [];
-        $articlePath = Articles::articlePath();
+        // One page per stored version. A lead keeps the 0.1.x shape exactly; any other version of
+        // the same language gets its own key (`article:9:ar-AE`) so (key, lang) stays unique.
         foreach ($store->listArticles() as $a) {
+            $lead = Locale::isLead($a);
             $pages[] = [
-                'key' => 'article:' . $a['externalId'], 'type' => 'article', 'lang' => $a['lang'],
-                'path' => $articlePath($a['lang'], $a['slug']), 'title' => $a['title'], 'updatedAt' => $a['updatedAt'],
-            ];
+                'key' => 'article:' . $a['externalId'] . ($lead ? '' : ':' . Locale::localeOf($a)), 'type' => 'article', 'lang' => $a['lang'],
+                'path' => Locale::versionPath($a), 'title' => $a['title'], 'updatedAt' => $a['updatedAt'],
+            ] + ($lead ? [] : ['locale' => Locale::localeOf($a)]);
         }
 
         return $pages;
@@ -322,6 +324,8 @@ class Snapshot
             ],
             'redirectHits' => array_slice($hits, 0, 1000),
             'share' => $share,
+            // 0.2.0 (hub contract 1.20.0): per-country article URLs and receiver-side hreflang.
+            'features' => ['localeUrls'],
         ];
     }
 

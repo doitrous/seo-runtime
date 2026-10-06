@@ -17,8 +17,8 @@ app, never against production.
 The files share one live store and drive it through ascending snapshot versions
 (`suite/fixture.mjs`'s `nextVersion()`, seeded from `Date.now()` so a version always beats
 whatever a previous run left on disk). `run.mjs` runs them **one file at a time, in this fixed
-order** — `sync, resolve, redirects, sitemap, robots, articles, entities, readability, pending,
-health` — spawning a fresh
+order** — `sync, resolve, redirects, sitemap, robots, articles, locales, entities, readability,
+pending, health` — spawning a fresh
 `node --test <file>` for each and stopping at the first non-zero exit. Do not run
 `node --test suite/` yourself: concurrent files race on the version and fail at random, and
 `run.mjs` also prints which contract section (file) failed, which a raw `node --test` invocation

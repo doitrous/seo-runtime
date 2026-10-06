@@ -85,6 +85,19 @@ export type StoredArticle = {
    */
   extra: Record<string, unknown>
   publishedAt: string; updatedAt: string
+  /**
+   * 0.2.0, per-country pages (hub contract 1.20.0). Optional so a row written by 0.1.x — or by a
+   * site's own `SeoStore` that predates them — still type-checks; read them through
+   * `localeOf`/`isLead` (locale.ts), which supply the defaults (`locale` = `lang`, `lead` = true).
+   *
+   * `locale`: the version's canonical locale (`ar-AE`). Storage is keyed by (externalId, locale).
+   * `lead`: the first version of its language in the payload; it keeps `articlePath(lang, slug)`.
+   * Every other version of that language is served under a lowercase locale prefix.
+   * `hreflang`: absolute URLs for every version of this externalId, computed at ingest.
+   */
+  locale?: string
+  lead?: boolean
+  hreflang?: Record<string, string>
 }
 
 /**

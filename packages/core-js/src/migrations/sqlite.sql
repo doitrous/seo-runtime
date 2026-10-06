@@ -30,7 +30,12 @@ CREATE TABLE IF NOT EXISTS seo_runtime_articles (
   -- plannedUpdateAt, secondaryKeywords, searchIntent, sections, introduction).
   extra TEXT NOT NULL DEFAULT '{}',
   published_at TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT '',
-  PRIMARY KEY (external_id, lang)
+  -- 0.2.0, per-country pages: one row per (externalId, locale). `locale` is the canonical locale
+  -- (ar-AE), or the language for a row with none, `is_lead` marks the first version of its
+  -- language, which keeps articlePath(lang, slug), `hreflang` is computed at ingest.
+  locale TEXT NOT NULL, is_lead INTEGER NOT NULL DEFAULT 1, hreflang TEXT NOT NULL DEFAULT '{}',
+  PRIMARY KEY (external_id, locale)
 );
--- findArticleBySlug() runs on every ingest, to answer the 409.
+-- findArticleBySlug() runs on every ingest, to answer the 409, and on every article view.
 CREATE INDEX IF NOT EXISTS seo_runtime_articles_slug ON seo_runtime_articles (lang, slug);
+CREATE INDEX IF NOT EXISTS seo_runtime_articles_locale_slug ON seo_runtime_articles (locale, slug);

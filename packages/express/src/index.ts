@@ -1,20 +1,30 @@
 import type { Request, RequestHandler, Response, Router } from 'express'
 import {
-  absoluteUrl, applySnapshot, authorBodyHtml, bearerOf, DEFAULT_ARTICLE_PATH, editorialBodyHtml,
+  absoluteUrl, applySnapshot, articleVersionPath, authorBodyHtml, bearerOf, DEFAULT_ARTICLE_PATH,
+  defaultArticleLocalePath, editorialBodyHtml, getArticle, isLead, langOfLocale, localeOf,
   EMPTY_SETTINGS, findAuthor, findHelpEntry, findTool, healthPayload, helpArticleJsonLd,
   helpBodyHtml, helpIndexBodyHtml, indexNowKeyFile, ingestArticles, localeFreeAlternates, normalizePath, personJsonLd,
   proxyApprovalAction, proxyPending, readConfig, redirectFor, resolveSeo, robotsTxt, shareBlockHtml,
   sitemapEntries, sitemapXml, startSync, submitIndexNow, submitVitals, timingSafeSecret,
   toolBodyHtml, toolEmbedHtml, toolJsonLd,
-  type ApprovalAction, type ArticlePath, type IngestOptions, type ResolvedSeo, type SeoStore,
-  type Settings, RUNTIME_VERSION,
+  type ApprovalAction, type ArticleLocalePath, type ArticlePath, type IngestOptions, type ResolvedSeo, type SeoStore,
+  type Settings, type StoredArticle, RUNTIME_VERSION,
 } from '@omary98/seo-runtime-core'
 import { injectHead } from './inject.ts'
 import { seoAdminHtml } from './admin.ts'
 
 export { headTags, injectHead } from './inject.ts'
+// Per-country pages (0.2.0): what a host's article route needs to serve `/<locale>/...`.
+export {
+  articleVersionPath, canonicalLocale, getArticle, isLocaleCode, langOfLocale, parseLocalePrefix,
+  type ArticleLocalePath, type LocalePrefix, type StoredArticle,
+} from '@omary98/seo-runtime-core'
 
-export type ProviderPage = { key: string; type: string; lang: string; path: string; title: string; updatedAt: string }
+export type ProviderPage = {
+  key: string; type: string; lang: string; path: string; title: string; updatedAt: string
+  /** 0.2.0: set on a non-lead article version (`ar-AE`); its `lang` is still the language. */
+  locale?: string
+}
 export type ExpressSeoOptions = {
   store: SeoStore
   pages: () => Promise<ProviderPage[]>
@@ -22,6 +32,14 @@ export type ExpressSeoOptions = {
   onArticle?: IngestOptions['onArticle']
   /** Where this site serves an article. Defaults to /{lang}/blog/{slug}. */
   articlePath?: ArticlePath
+  /**
+   * 0.2.0, per-country pages: where a non-lead version of a language is served, given its
+   * canonical locale (`ar-AE`) and slug. Defaults to `articlePath` with the language segment
+   * replaced by the lowercase locale (`/ar/blog/x` → `/ar-ae/blog/x`), or `/<locale>` prepended
+   * when the language is served unprefixed. The lead version of each language always stays at
+   * `articlePath(lang, slug)`.
+   */
+  articleLocalePath?: ArticleLocalePath
   version?: string
   /** Appends the share block (entities.ts's `shareBlockHtml`) to the author/help/tool pages this
    * package renders, and reports it on the health ping. Defaults to true; pass `false` to opt out. */
@@ -98,11 +116,14 @@ async function readBody(req: Request, max: number): Promise<{ body: unknown } | 
  * live elsewhere (an `onArticle` hook) has an empty article store here, so this returns nothing
  * and the site's own provider lists them instead — each article appears exactly once.
  */
-async function articlePages(store: SeoStore, articlePath: ArticlePath): Promise<ProviderPage[]> {
+async function articlePages(store: SeoStore, articlePath: ArticlePath, articleLocalePath?: ArticleLocalePath): Promise<ProviderPage[]> {
   const articles = await store.listArticles()
+  // One page per stored version. A lead keeps the 0.1.x shape exactly; any other version of the
+  // same language gets its own key (`article:9:ar-AE`) so (key, lang) stays unique.
   return articles.map((a) => ({
-    key: `article:${a.externalId}`, type: 'article', lang: a.lang,
-    path: articlePath(a.lang, a.slug), title: a.title, updatedAt: a.updatedAt,
+    key: isLead(a) ? `article:${a.externalId}` : `article:${a.externalId}:${localeOf(a)}`, type: 'article', lang: a.lang,
+    path: articleVersionPath(a, articlePath, articleLocalePath), title: a.title, updatedAt: a.updatedAt,
+    ...(isLead(a) ? {} : { locale: localeOf(a) }),
   }))
 }
 
@@ -118,6 +139,7 @@ async function articlePages(store: SeoStore, articlePath: ArticlePath): Promise<
 export function seoRuntime(opts: ExpressSeoOptions) {
   const version = opts.version ?? RUNTIME_VERSION
   const articlePath = opts.articlePath ?? DEFAULT_ARTICLE_PATH
+  const articleLocalePath = opts.articleLocalePath ?? defaultArticleLocalePath(articlePath)
   const shareEnabled = opts.share !== false
 
   const auth: RequestHandler = (req, res, next) => {
@@ -153,7 +175,7 @@ export function seoRuntime(opts: ExpressSeoOptions) {
     })
 
     app.get('/api/seo/pages', auth, async (_req, res) => {
-      const articles = await articlePages(opts.store, articlePath)
+      const articles = await articlePages(opts.store, articlePath, articleLocalePath)
       res.json({ pages: [...await opts.pages(), ...articles] })
     })
 
@@ -177,6 +199,7 @@ export function seoRuntime(opts: ExpressSeoOptions) {
         // The language's own origin, not just the first configured one — absoluteUrl already
         // carries that fallback for a language with no origin of its own.
         urlFor: (lang, slug) => absoluteUrl(settings, lang, articlePath(lang, slug)),
+        urlForLocale: (locale, slug) => absoluteUrl(settings, langOfLocale(locale), articleLocalePath(locale, slug)),
         onArticle: opts.onArticle,
       })
       res.status(out.status).json(out.body)
@@ -242,7 +265,7 @@ export function seoRuntime(opts: ExpressSeoOptions) {
         const snapshot = await opts.store.getSnapshot()
         res.type('application/xml')
         if (!snapshot) { res.send(sitemapXml([])); return }
-        const entries = sitemapEntries(snapshot, await opts.store.listArticles(), articlePath)
+        const entries = sitemapEntries(snapshot, await opts.store.listArticles(), articlePath, articleLocalePath)
         res.send(sitemapXml(entries))
       } catch (e) {
         res.status(500).type('text/plain').send(`sitemap error: ${(e as Error).message}`)
@@ -365,6 +388,11 @@ export function seoRuntime(opts: ExpressSeoOptions) {
       let cached: Promise<ResolvedSeo> | null = null
       res.locals.seo = () => (cached ??= resolveSeo(opts.store, normalizePath(req.path), String(req.query.lang ?? 'en')))
       res.locals.injectHead = async (html: string) => injectHead(html, await res.locals.seo())
+      // Per-country pages (0.2.0): a host route like `app.get('/:lang/blog/:slug', …)` already
+      // receives `ar-ae` as `req.params.lang`; these look the stored version up and give its URL.
+      res.locals.getArticle = (langOrLocale: string, slug: string): Promise<StoredArticle | null> =>
+        getArticle(opts.store, langOrLocale, slug)
+      res.locals.articleHref = (a: StoredArticle): string => articleVersionPath(a, articlePath, articleLocalePath)
       next()
     })
 

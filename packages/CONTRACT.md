@@ -22,7 +22,8 @@ Code-level options (never environment variables), with their defaults:
 | `pages` | `() => []` | the site's page provider |
 | `supported` | `['en']` | languages this site serves |
 | `onArticle` | — | optional hook that takes over article storage |
-| `articlePath` | `` (lang, slug) => `/${lang}/blog/${slug}` `` | where this site serves an article |
+| `articlePath` | `` (lang, slug) => `/${lang}/blog/${slug}` `` | where this site serves an article (the lead version of each language) |
+| `articleLocalePath` | `articlePath` with the language segment swapped for the lowercase locale | 0.2.0: where a non-lead version is served, `(locale, slug) => path` (see "Per-country pages") |
 
 ## Local store
 
@@ -69,8 +70,8 @@ with it. When `settings.indexingEnabled` is false, `robots.index` is false for e
 |---|---|---|
 | `POST /api/articles` | Bearer secret | Spec-1 article payload. `200 {results, skipped}` \| `400 {error}` \| `401 {error:'unauthorized'}` \| `409 {error:'slug_taken', …}` \| `413 {error:'too large'}` \| any status an `onArticle` hook asks for (Aspects' `422 {error:'publication_gate'}`). |
 | `POST /api/seo/sync` | Bearer secret | Full snapshot with a `version`. `200 {status:'applied'\|'stale', version}`. A snapshot whose `version` is lower than the stored one is ignored and answered `stale`. A body that is not a well-formed snapshot is `400 {status:'invalid'}` — never a 500. |
-| `GET /api/seo/pages` | Bearer secret | `{pages: [{key, type, lang, path, title, updatedAt}]}` from the site's page provider, plus the runtime's own article pages at `articlePath(lang, slug)`. Each article appears exactly once per stored language. |
-| `GET /api/seo/health` | **Bearer secret** | `{version, siteSlug, lastSyncAt, snapshotVersion, counts, redirectHits: [{source, hits}], share}` (at most 1,000 redirect entries, busiest first; the rest wait for the next ping). It names the site and enumerates every redirect source path, and it is the only route whose response resets state, so it is never anonymous. `share` defaults to true on Express and Laravel (opt out with `opts.share === false` / Laravel's `seo-runtime.share` config), but to **false on Next** — opt in with `share: true`, since Next never renders the block itself and so cannot verify a site actually placed it. A hub reading an older payload with no `share` key at all treats it as false. |
+| `GET /api/seo/pages` | Bearer secret | `{pages: [{key, type, lang, path, title, updatedAt}]}` from the site's page provider, plus the runtime's own article pages at `articlePath(lang, slug)`. Each article appears exactly once per stored version (0.2.0: per locale — a non-lead version is keyed `article:{externalId}:{locale}`, carries `locale`, and sits at its locale URL). |
+| `GET /api/seo/health` | **Bearer secret** | `{version, siteSlug, lastSyncAt, snapshotVersion, counts, redirectHits: [{source, hits}], share, features}` (at most 1,000 redirect entries, busiest first; the rest wait for the next ping). It names the site and enumerates every redirect source path, and it is the only route whose response resets state, so it is never anonymous. `share` defaults to true on Express and Laravel (opt out with `opts.share === false` / Laravel's `seo-runtime.share` config), but to **false on Next** — opt in with `share: true`, since Next never renders the block itself and so cannot verify a site actually placed it. A hub reading an older payload with no `share` key at all treats it as false. `features` (0.2.0) lists capabilities the hub may rely on — `["localeUrls"]` on every stack, see "Per-country pages". |
 | `GET /api/seo/probe?path=&lang=` | Bearer secret | `resolveSeo` as JSON. Exists so the conformance suite can check resolution over HTTP on every stack; not part of rendering. |
 | `GET /sitemap.xml` | none | See below. |
 | `GET /robots.txt` | none | See below. |
@@ -118,7 +119,8 @@ default. See `examples/next-demo/next.config.ts`.
 ## Sitemap
 
 Pages with `includeInSitemap && index` and a non-missing record, plus every stored article URL per
-language at `articlePath(lang, slug)`. `alternates` come from the page's `group`; `lastmod` from
+stored version — the lead of each language at `articlePath(lang, slug)`, every other version at its
+locale URL, each `<url>` carrying the full hreflang set of its externalId (see "Per-country pages"). `alternates` come from the page's `group`; `lastmod` from
 `updatedAt`; `priority` from the page SEO, falling back to `settings.pageDefaults[type].priority`
 and then to `0.5` — there is no per-type magic number; `changefreq` from
 `settings.pageDefaults[type].changefreq`. Phase 1 ships a single `/sitemap.xml`; `sitemapXml` throws when the URL set exceeds 5,000 entries
@@ -152,10 +154,10 @@ is a no-op and ships an XSS hole.
 
 | Status | When |
 |---|---|
-| `200 {results, skipped}` | stored, or updated in place — re-ingesting the same `(externalId, lang)` updates, it never duplicates |
+| `200 {results, skipped}` | stored, or updated in place — re-ingesting the same `(externalId, locale)` (`lang` when the item has no `locale`) updates, it never duplicates |
 | `400 {error}` | the payload is not a valid article payload |
 | `401 {error:'unauthorized'}` | bad or missing Bearer |
-| `409 {error:'slug_taken', slug, lang}` | that `(lang, slug)` already belongs to a **different** `externalId` |
+| `409 {error:'slug_taken', slug, lang}` | that `(lang, slug)` already belongs to a **different** `externalId` (0.2.0: checked per URL space — a lead against its language's leads, any other version against its own locale, answered with `locale` added) |
 | `413 {error:'too large'}` | body over 2 MB |
 | anything the hook asks for | an `onArticle` hook may return `{status, …}`; those keys are passed through verbatim |
 
@@ -166,6 +168,56 @@ answered `500 {error:'article_hook_failed', message}` — never an unhandled cra
 A slug is rejected only when it is empty, longer than 191 characters, or contains whitespace, `/`,
 `?`, `#`, or a `..` segment. It is **not** required to be ASCII kebab-case: the sites serve Arabic
 slugs and the hub has been sending them since spec 1.
+
+## Per-country pages (0.2.0, hub contract 1.20.0)
+
+One page per country for countries that share a language (ar-SA, ar-AE, ar-LY, ar-EG). The hub
+sends it only to a site whose `localeUrls` flag is on, which it flips after the site's runtime
+advertises `features: ["localeUrls"]` on the health ping. A payload without `locale` behaves
+exactly as 0.1.6.
+
+**Payload.** Every `articles[]` item may carry `locale` (`"ar-AE"`); it is validated (a
+language-region code whose language is the item's `lang`, else `400 {error:'invalid
+articles[i].locale'}`) and canonicalised (`ar-ae`/`ar_AE` → `ar-AE`). An item without one has
+`locale = lang`. Several items may share a `lang`. `supported` is still checked by `lang`.
+
+**Lead.** The first item of each language in the payload is that language's *lead*: it keeps the
+existing URL, `articlePath(lang, slug)`, and its stored row is the one a 0.1.x row of that
+`(externalId, lang)` becomes — existing URLs never move and a row never duplicates when the hub
+starts sending `locale`. Every other version is served at `articleLocalePath(locale, slug)`;
+the default swaps the first path segment equal to the language for the lowercase locale
+(`/ar/blog/x` → `/ar-ae/blog/x`, `/blog/ar/x` → `/blog/ar-ae/x`) and prepends `/<locale>` to a
+path with no language segment (`/blog/x` → `/en-us/blog/x`). The slug is the same across
+versions.
+
+**Storage.** Keyed by `(externalId, locale)`, with `locale`, `lead` and `hreflang` on each row. The
+0.2.0 migration (core-js `SqlStore.migrate()`, Laravel's `2026_10_06_000001` migration,
+WordPress's `doitrous_seo_upgrade_articles_table` on `plugins_loaded`) adds the columns,
+backfills `locale = lang` and `lead = true`, and re-keys the table. A site's own `SeoStore` that
+predates 0.2.0 keeps working for payloads without `locale`; it must key by locale before the hub's
+`localeUrls` flag is turned on.
+
+**hreflang**, computed by the receiver from every version it stores for the `externalId` (the
+payload's `hreflang` is advisory): every locale → its URL; each plain language → its lead's URL;
+`x-default` → the first item's URL (the source). For a payload without `locale` the 0.1.6 rule
+stands (`x-default` = `en`, else the first language). It is stored on every version, rewritten on
+every ingest of that `externalId`, and printed in the sitemap.
+
+**Results.** `{lang, locale, remoteId, remoteUrl}`. `locale` is echoed only when the item sent
+one. `remoteId` is `{externalId}:{lang}` for a lead (unchanged from 0.1.x) and
+`{externalId}:{locale}` for any other version.
+
+**Lookup (the host site's routing).** The runtime still never renders an article; the site does.
+Each stack exposes the lookup a site's article route uses, taking the first path segment as-is:
+a plain language returns that language's lead, a locale (`ar-ae` or `ar-AE`) returns the version
+stored for it, and a locale that names its language's *lead* returns null (the lead is served at
+the language URL only). core-js `getArticle(store, langOrLocale, slug)` and
+`parseLocalePrefix(pathname, supported?)`; Next `seo.article(langOrLocale, slug)`,
+`seo.articleMetadata(...)`, `seo.articleHref(article)`; Express `res.locals.getArticle(...)`,
+`res.locals.articleHref(...)`; Laravel `Seo::article(...)`, `Seo::articleHref(...)`,
+`Seo::parseLocalePrefix(...)`; WordPress `doitrous_seo_get_article(...)`,
+`doitrous_seo_parse_locale_prefix(...)`. `store.findArticleBySlug(langOrLocale, slug)` (and each
+port's equivalent) accepts either form too and is what the 409 uses.
 
 ## v2 fields (Phase 5, AI readability)
 
