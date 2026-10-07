@@ -78,9 +78,13 @@ export function sitemapEntries(
     byJob.set(a.externalId, g)
   }
   const urlOf = (a: StoredArticle) => absoluteUrl(s, a.lang, articleVersionPath(a, articlePath, articleLocalePath))
+  // The hub registers every published article as a snapshot page too. When it has, the page is
+  // the entry (or, when noindexed, the reason there is none), so the stored article is skipped.
+  const described = new Set(snapshot.pages.map((p) => absoluteUrl(s, p.lang, p.path).replace(/\/+$/, '')))
   for (const group of byJob.values()) {
     const alternates = articleHreflang(sourceFirst(group), urlOf, isLegacyGroup(group))
     for (const a of group) {
+      if (described.has(urlOf(a).replace(/\/+$/, ''))) continue
       out.push({
         loc: urlOf(a), lastmod: day(a.updatedAt),
         changefreq: (s.pageDefaults.article ?? DEFAULT_PAGE_DEFAULTS).changefreq,

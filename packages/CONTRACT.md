@@ -129,7 +129,9 @@ When `settings.indexingEnabled` is false the sitemap is empty.
 
 The articles the sitemap lists are the ones in the runtime's own store. A site that keeps its
 articles elsewhere (an `onArticle` hook) lists them from its `pages` provider instead, so that
-every article appears exactly once across the two sources.
+every article appears exactly once across the two sources. The hub also registers each published
+article as a snapshot page; a stored article whose URL a snapshot page already describes is skipped
+(the page is the entry, or — when noindexed — the reason there is none), so it is never listed twice.
 
 ## Robots
 
