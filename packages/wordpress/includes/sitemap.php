@@ -51,27 +51,51 @@ function doitrous_seo_sitemap_entries(array $snapshot, array $articles): array {
     }
 
     // Grouped by external id, not slug: two different jobs may reuse the same slug in different
-    // languages and must not become each other's alternates.
+    // languages and must not become each other's alternates. One entry per stored version (per
+    // locale, 0.2.0), each carrying the full hreflang set of its externalId.
     $articleDefaults = $s['pageDefaults']['article'] ?? DOITROUS_SEO_PAGE_DEFAULTS;
     $byJob = [];
     foreach ($articles as $a) $byJob[$a['externalId']][] = $a;
+    $urlOf = fn (array $a) => doitrous_seo_absolute_url($s, $a['lang'], doitrous_seo_article_version_path($a));
     foreach ($byJob as $group) {
-        $alternates = [];
-        foreach ($group as $a) $alternates[$a['lang']] = doitrous_seo_absolute_url($s, $a['lang'], doitrous_seo_article_path($a['lang'], $a['slug']));
+        $alternates = doitrous_seo_article_hreflang(doitrous_seo_source_first($group), $urlOf, doitrous_seo_is_legacy_group($group));
         foreach ($group as $a) {
             $out[] = [
-                'loc' => doitrous_seo_absolute_url($s, $a['lang'], doitrous_seo_article_path($a['lang'], $a['slug'])),
+                'loc' => $urlOf($a),
                 'lastmod' => doitrous_seo_sitemap_lastmod($a['updatedAt']),
                 'changefreq' => $articleDefaults['changefreq'],
                 // Same fallback chain as a page: the type default, then DOITROUS_SEO_PAGE_DEFAULTS.
                 // No per-type magic number.
                 'priority' => $articleDefaults['priority'],
-                'alternates' => doitrous_seo_with_default($alternates),
+                'alternates' => $alternates,
             ];
         }
     }
 
     return $out;
+}
+
+/** Every version under its own language code (what 0.1.x stored): 0.1.6's x-default rule. */
+function doitrous_seo_is_legacy_group(array $group): bool {
+    foreach ($group as $a) if (doitrous_seo_locale_of($a) !== $a['lang']) return false;
+
+    return true;
+}
+
+/** The source version first (recovered from the x-default stored at ingest), for x-default. */
+function doitrous_seo_source_first(array $group): array {
+    $xd = null;
+    foreach ($group as $a) if (!empty($a['hreflang']['x-default'])) { $xd = $a['hreflang']['x-default']; break; }
+    if ($xd === null) return $group;
+    foreach ($group as $i => $a) {
+        if (($a['hreflang'][doitrous_seo_locale_of($a)] ?? null) === $xd && $i > 0) {
+            unset($group[$i]);
+
+            return array_merge([$a], array_values($group));
+        }
+    }
+
+    return $group;
 }
 
 function doitrous_seo_urlset(array $entries): string {

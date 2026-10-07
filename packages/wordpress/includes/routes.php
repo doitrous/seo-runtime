@@ -197,6 +197,8 @@ function doitrous_seo_health_payload(): array {
         ],
         // Busiest sources first, capped at 1,000: the rest wait for the next ping.
         'redirectHits' => doitrous_seo_top_hits(doitrous_seo_peek_hits()),
+        // 0.2.0 (hub contract 1.20.0): per-country article URLs and receiver-side hreflang.
+        'features' => ['localeUrls'],
     ];
 }
 
@@ -217,12 +219,15 @@ function doitrous_seo_route_pages(): void {
             ];
         }
     }
+    // One page per stored version. A lead keeps the 0.1.x shape exactly; any other version of the
+    // same language gets its own key (`article:9:ar-AE`) so (key, lang) stays unique.
     foreach (doitrous_seo_list_articles() as $a) {
+        $lead = doitrous_seo_is_lead($a);
         $pages[] = [
-            'key' => 'article:' . $a['externalId'], 'type' => 'article', 'lang' => $a['lang'],
-            'path' => doitrous_seo_article_path($a['lang'], $a['slug']),
+            'key' => 'article:' . $a['externalId'] . ($lead ? '' : ':' . doitrous_seo_locale_of($a)), 'type' => 'article', 'lang' => $a['lang'],
+            'path' => doitrous_seo_article_version_path($a),
             'title' => $a['title'], 'updatedAt' => $a['updatedAt'],
-        ];
+        ] + ($lead ? [] : ['locale' => doitrous_seo_locale_of($a)]);
     }
     doitrous_seo_json(['pages' => $pages]);
 }

@@ -1,14 +1,19 @@
 import {
-  absoluteUrl, applySnapshot, bearerOf, DEFAULT_ARTICLE_PATH, EMPTY_SETTINGS, healthPayload,
+  absoluteUrl, applySnapshot, articleVersionPath, bearerOf, DEFAULT_ARTICLE_PATH, defaultArticleLocalePath,
+  EMPTY_SETTINGS, healthPayload, isLead, langOfLocale, localeOf,
   ingestArticles, proxyApprovalAction, proxyPending, readConfig, resolveSeo, submitIndexNow,
   submitVitals, timingSafeSecret,
-  type ApprovalAction, type ArticlePath, type IngestOptions, type ResolvedSeo, type SeoStore,
+  type ApprovalAction, type ArticleLocalePath, type ArticlePath, type IngestOptions, type ResolvedSeo, type SeoStore,
   RUNTIME_VERSION,
 } from '@omary98/seo-runtime-core'
 
 export const MAX_BODY_BYTES = 2 * 1024 * 1024
 
-export type ProviderPage = { key: string; type: string; lang: string; path: string; title: string; updatedAt: string }
+export type ProviderPage = {
+  key: string; type: string; lang: string; path: string; title: string; updatedAt: string
+  /** 0.2.0: set on a non-lead article version (`ar-AE`); its `lang` is still the language. */
+  locale?: string
+}
 
 export type SeoConfig = {
   store: SeoStore
@@ -17,6 +22,14 @@ export type SeoConfig = {
   onArticle?: IngestOptions['onArticle']
   /** Where this site serves an article. Defaults to /{lang}/blog/{slug}; three of four sites differ. */
   articlePath?: ArticlePath
+  /**
+   * 0.2.0, per-country pages: where a non-lead version of a language is served, given its
+   * canonical locale (`ar-AE`) and slug. Defaults to `articlePath` with the language segment
+   * replaced by the lowercase locale (`/ar/blog/x` → `/ar-ae/blog/x`), or `/<locale>` prepended
+   * when the language is served unprefixed. The lead version of each language always stays at
+   * `articlePath(lang, slug)`.
+   */
+  articleLocalePath?: ArticleLocalePath
   version?: string
   /** Reported on the health ping. Next never renders the share block itself (a site includes
    * `<ShareBlock/>` where it wants one, same as `<SeoJsonLd/>`) — this package has no way to
@@ -73,11 +86,14 @@ export async function readJsonBody(req: Request): Promise<{ body: unknown } | nu
  * returns nothing and the site's own `pages` provider lists them instead — each article appears
  * exactly once across the two sources.
  */
-export async function articlePages(store: SeoStore, articlePath: ArticlePath): Promise<ProviderPage[]> {
+export async function articlePages(store: SeoStore, articlePath: ArticlePath, articleLocalePath?: ArticleLocalePath): Promise<ProviderPage[]> {
   const articles = await store.listArticles()
+  // One page per stored version. A lead keeps the 0.1.x shape exactly; any other version of the
+  // same language gets its own key (`article:9:ar-AE`) so (key, lang) stays unique.
   return articles.map((a) => ({
-    key: `article:${a.externalId}`, type: 'article', lang: a.lang,
-    path: articlePath(a.lang, a.slug), title: a.title, updatedAt: a.updatedAt,
+    key: isLead(a) ? `article:${a.externalId}` : `article:${a.externalId}:${localeOf(a)}`, type: 'article', lang: a.lang,
+    path: articleVersionPath(a, articlePath, articleLocalePath), title: a.title, updatedAt: a.updatedAt,
+    ...(isLead(a) ? {} : { locale: localeOf(a) }),
   }))
 }
 
@@ -89,7 +105,7 @@ export async function handleSeoGet(config: SeoConfig, req: Request, route: strin
   if (!authorized(req)) return unauthorized()
   if (route === 'health') return json(await healthPayload(config.store, version, readConfig().slug, config.share === true))
   if (route === 'pages') {
-    return json({ pages: [...await config.pages(), ...await articlePages(config.store, config.articlePath ?? DEFAULT_ARTICLE_PATH)] })
+    return json({ pages: [...await config.pages(), ...await articlePages(config.store, config.articlePath ?? DEFAULT_ARTICLE_PATH, config.articleLocalePath)] })
   }
   if (route === 'probe') {
     const url = new URL(req.url)
@@ -152,6 +168,7 @@ export async function handleArticles(config: SeoConfig, body: unknown): Promise<
     // The language's own origin, not just the first configured one — absoluteUrl already
     // carries that fallback for a language with no origin of its own.
     urlFor: (lang, slug) => absoluteUrl(settings, lang, path(lang, slug)),
+    urlForLocale: (locale, slug) => absoluteUrl(settings, langOfLocale(locale), (config.articleLocalePath ?? defaultArticleLocalePath(path))(locale, slug)),
     onArticle: config.onArticle,
   })
   return json(out.body, out.status)

@@ -47,6 +47,13 @@ class Articles
             foreach ($a['faq'] ?? [] as $f) {
                 if (!is_array($f) || !is_string($f['q'] ?? null) || !is_string($f['a'] ?? null)) return ['error' => "invalid articles[$i].faq"];
             }
+            if (array_key_exists('locale', $a) && $a['locale'] !== null) {
+                // The language part must be the item's own language: `ar-AE` under `lang: 'ar'`.
+                $loc = $a['locale'];
+                $ok = is_string($loc) && (Locale::canonical($loc) === Locale::canonical($a['lang'])
+                    || (Locale::isLocaleCode($loc) && Locale::langOf($loc) === Locale::langOf($a['lang'])));
+                if (!$ok) return ['error' => "invalid articles[$i].locale"];
+            }
             foreach ($a['references'] ?? [] as $r) {
                 if (!is_array($r) || !is_string($r['url'] ?? null)) return ['error' => "invalid articles[$i].references"];
             }
@@ -123,6 +130,17 @@ class Articles
         return rtrim($space !== false && $space > $max * 0.6 ? mb_substr($cut, 0, $space) : $cut, " ,;:.-");
     }
 
+    /** The item's locale: its own `locale` when sent, else its `lang` (0.1.6 behaviour). */
+    private static function itemLocale(array $a): string
+    {
+        return is_string($a['locale'] ?? null) && trim($a['locale']) !== '' ? Locale::canonical($a['locale']) : $a['lang'];
+    }
+
+    private static function hasLocale(array $a): bool
+    {
+        return is_string($a['locale'] ?? null) && trim($a['locale']) !== '';
+    }
+
     /** toStoredArticles in articles.ts. */
     public static function toRows(array $payload, array $supported): array
     {
@@ -130,8 +148,14 @@ class Articles
         $rows = [];
         // Matches JS's `new Date().toISOString()`: UTC, millisecond precision, literal "Z".
         $now = now('UTC')->format('Y-m-d\TH:i:s.v\Z');
+        // The lead of each language is its first item (the hub sends the source first, then
+        // market order). A later item carrying the lead's own locale is the same version again.
+        $leadLocale = [];
         foreach ($payload['articles'] as $a) {
             if (!in_array($a['lang'], $supported, true)) { $skipped[] = $a['lang']; continue; }
+            $locale = self::itemLocale($a);
+            $leadLocale[$a['lang']] ??= $locale;
+            $lead = $leadLocale[$a['lang']] === $locale;
             $lede = trim($a['introduction'] ?? '') ?: self::intro($a['bodyMd']);
             $rows[] = [
                 'externalId' => $payload['externalId'], 'lang' => $a['lang'], 'slug' => trim($a['slug']),
@@ -158,6 +182,7 @@ class Articles
                     'sections' => $a['sections'] ?? null, 'introduction' => $a['introduction'] ?? null,
                 ], fn ($v) => $v !== null),
                 'publishedAt' => $now, 'updatedAt' => $now,
+                'locale' => $locale, 'lead' => $lead, 'hreflang' => [],
             ];
         }
 
@@ -188,26 +213,79 @@ class Articles
         ['skipped' => $skipped, 'articles' => $rows] = self::toRows($v['payload'], $supported);
         if (!$rows) return ['status' => 400, 'body' => ['error' => 'no supported languages']];
 
+        $settings = $store->getSettings() ?? Snapshot::EMPTY_SETTINGS;
+        $urlOf = fn (array $a) => Snapshot::absoluteUrl($settings, $a['lang'], Locale::versionPath($a));
+
+        // A slug that already belongs to a DIFFERENT job would publish a second article at the
+        // same URL. Checked per URL space: a lead against its language's leads, any other version
+        // against its own locale.
         foreach ($rows as $row) {
-            $clash = $store->findArticleBySlug($row['lang'], $row['slug']);
+            $lead = Locale::isLead($row);
+            $clash = $store->findArticleBySlug($lead ? $row['lang'] : $row['locale'], $row['slug']);
             if ($clash && $clash['externalId'] !== $row['externalId']) {
-                return ['status' => 409, 'body' => ['error' => 'slug_taken', 'slug' => $row['slug'], 'lang' => $row['lang']]];
+                return ['status' => 409, 'body' => ['error' => 'slug_taken', 'slug' => $row['slug'], 'lang' => $row['lang']]
+                    + ($lead ? [] : ['locale' => $row['locale']])];
             }
         }
 
-        $settings = $store->getSettings() ?? Snapshot::EMPTY_SETTINGS;
-        $articlePath = self::articlePath();
+        // hreflang from every version this site holds for the externalId once this payload lands:
+        // the payload's own versions first (the source is first), then any stored earlier.
+        $incoming = [];
+        foreach ($rows as $row) $incoming[$row['locale']] = $row;
+        $incoming = array_values($incoming);
+        $untouched = array_values(array_filter($store->listArticleVersions($v['payload']['externalId']), function (array $old) use ($incoming) {
+            foreach ($incoming as $a) {
+                if (Locale::localeOf($a) === Locale::localeOf($old)) return false;
+                if (Locale::isLead($a) && Locale::isLead($old) && $a['lang'] === $old['lang']) return false;
+            }
+
+            return true;
+        }));
+        $legacy = true;
+        foreach ($v['payload']['articles'] as $item) if (self::hasLocale($item)) $legacy = false;
+        $hreflang = Locale::hreflang(array_merge($incoming, $untouched), $urlOf, $legacy);
+
         $results = [];
         foreach ($rows as $row) {
+            $row['hreflang'] = $hreflang;
             $store->upsertArticle($row);
-            $results[] = [
-                'lang' => $row['lang'], 'remoteId' => $row['externalId'] . ':' . $row['lang'],
-                // The language's own base URL, not just the first configured one —
-                // Snapshot::absoluteUrl already carries that fallback for a language with none.
-                'remoteUrl' => Snapshot::absoluteUrl($settings, $row['lang'], $articlePath($row['lang'], $row['slug'])),
-            ];
+            $lead = Locale::isLead($row);
+            $sent = null;
+            foreach ($v['payload']['articles'] as $item) {
+                if ($item['lang'] === $row['lang'] && self::itemLocale($item) === $row['locale']) { $sent = $item; break; }
+            }
+            $results[] = ['lang' => $row['lang']]
+                // Only echoed when the hub sent one, so a 0.1.6-shaped payload gets a 0.1.6 answer.
+                + ($sent !== null && self::hasLocale($sent) ? ['locale' => $sent['locale']] : [])
+                + [
+                    'remoteId' => $row['externalId'] . ':' . ($lead ? $row['lang'] : $row['locale']),
+                    // The language's own base URL, not just the first configured one —
+                    // Snapshot::absoluteUrl already carries that fallback for a language with none.
+                    'remoteUrl' => $urlOf($row),
+                ];
+        }
+        // Versions stored by an earlier payload keep their content; only their hreflang moves.
+        foreach ($untouched as $old) {
+            if (($old['hreflang'] ?? []) != $hreflang) $store->upsertArticle(array_merge($old, ['hreflang' => $hreflang]));
         }
 
         return ['status' => 200, 'body' => ['results' => $results, 'skipped' => $skipped]];
+    }
+
+    /**
+     * getArticle in articles.ts — the host's article lookup for routing. `$langOrLocale` is the
+     * first path segment (`ar` → that language's lead, `ar-ae`/`ar-AE` → that locale's version).
+     * Null for an unknown slug, and for a locale that names its language's lead (the lead is
+     * served at the language URL only; answering the locale URL too would duplicate it).
+     */
+    public static function find(EloquentStore $store, string $langOrLocale, string $slug): ?array
+    {
+        $key = trim($langOrLocale);
+        if ($key === '' || $slug === '') return null;
+        $a = $store->findArticleBySlug($key, $slug);
+        if (!$a) return null;
+        if (Locale::isLead($a)) return strtolower($a['lang']) === strtolower($key) ? $a : null;
+
+        return Locale::localeOf($a) === Locale::canonical($key) ? $a : null;
     }
 }

@@ -17,9 +17,31 @@ export interface SeoStore {
   listGroup(groupKey: string): Promise<SnapshotPage[]>
   getRedirect(path: string): Promise<StoredRedirect | null>
   listArticles(lang?: string): Promise<StoredArticle[]>
-  /** Slug-collision detection for the 409. Returns the row whatever its `externalId`. */
-  findArticleBySlug(lang: string, slug: string): Promise<StoredArticle | null>
+  /**
+   * Article lookup, and slug-collision detection for the 409. Returns the row whatever its
+   * `externalId`. `langOrLocale` is either a plain language (`ar`) — which resolves to that
+   * language's **lead** version, the one at `articlePath(lang, slug)` — or a locale (`ar-AE`,
+   * `ar-ae`), which resolves to the version stored under that locale. A plain-language lead is
+   * tried first, so a site whose `supported` list carries a region-coded language (`pt-BR`) still
+   * finds it by that code.
+   *
+   * A store written for 0.1.x that only understands a plain language keeps working for every
+   * payload without `locale`; it must learn locales before the hub's `localeUrls` is turned on.
+   */
+  findArticleBySlug(langOrLocale: string, slug: string): Promise<StoredArticle | null>
+  /**
+   * Keyed by (externalId, locale) — `localeOf(article)`, which is `lang` for a row with no
+   * locale. A **lead** (`isLead(article)`) instead replaces the existing lead of its language for
+   * that externalId whatever its stored locale, so a 0.1.x row keyed by language is updated in
+   * place (never duplicated) when the hub starts sending `locale`; any non-lead row of that
+   * externalId already stored under the lead's locale is removed.
+   */
   upsertArticle(article: StoredArticle): Promise<StoredArticle>
+  /**
+   * Every stored version of one externalId. Optional: when a store omits it the runtime filters
+   * `listArticles()` instead.
+   */
+  listArticleVersions?(externalId: number): Promise<StoredArticle[]>
   /** Counts a redirect hit locally; reported as a delta by the next health ping. */
   incrementHit(source: string): Promise<void>
   /** The current deltas, without resetting. `GET /api/seo/health` must not mutate. */

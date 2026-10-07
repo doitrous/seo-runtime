@@ -311,3 +311,58 @@ test('metadata mirrors resolveSeo into the Next shape', async () => {
   assert.equal(m.robots!.index, true)
   cleanup()
 })
+
+// --- 0.2.0: per-country pages ------------------------------------------------------------------
+
+const localePayload = {
+  externalId: 9, articles: [
+    { lang: 'ar', locale: 'ar-SA', title: 'SA', slug: 'hair', bodyMd: '# SA\n\nBody.' },
+    { lang: 'ar', locale: 'ar-AE', title: 'AE', slug: 'hair', bodyMd: '# AE\n\nBody.' },
+    { lang: 'en', locale: 'en-US', title: 'US', slug: 'hair', bodyMd: '# US\n\nBody.' },
+  ],
+}
+
+test('0.2.0: locale versions ingest to /<locale>/… and resolve through article()/articleMetadata()', async () => {
+  const { seo, cleanup } = runtime()
+  await seo.handlers.POST(post('/api/seo/sync', snapshot), ctx('sync'))
+  const res = await seo.articleHandler.POST(post('/api/articles', localePayload))
+  assert.equal(res.status, 200)
+  assert.deepEqual((await res.json() as { results: unknown[] }).results, [
+    { lang: 'ar', locale: 'ar-SA', remoteId: '9:ar', remoteUrl: 'https://demo.test/ar/blog/hair' },
+    { lang: 'ar', locale: 'ar-AE', remoteId: '9:ar-AE', remoteUrl: 'https://demo.test/ar-ae/blog/hair' },
+    { lang: 'en', locale: 'en-US', remoteId: '9:en', remoteUrl: 'https://demo.test/en/blog/hair' },
+  ])
+  assert.equal((await seo.article('ar-ae', 'hair'))?.title, 'AE')
+  assert.equal((await seo.article('ar', 'hair'))?.title, 'SA')
+  assert.equal(await seo.article('ar-sa', 'hair'), null)
+  assert.equal(seo.articleHref((await seo.article('ar-ae', 'hair'))!), '/ar-ae/blog/hair')
+  const meta = await seo.articleMetadata('ar-ae', 'hair')
+  assert.equal(meta?.alternates?.canonical, 'https://demo.test/ar-ae/blog/hair')
+  assert.deepEqual(meta?.alternates?.languages, {
+    'ar-SA': 'https://demo.test/ar/blog/hair', 'ar-AE': 'https://demo.test/ar-ae/blog/hair', 'en-US': 'https://demo.test/en/blog/hair',
+    ar: 'https://demo.test/ar/blog/hair', en: 'https://demo.test/en/blog/hair', 'x-default': 'https://demo.test/ar/blog/hair',
+  })
+
+  const pages = await (await seo.handlers.GET(get('/api/seo/pages'), ctx('pages'))).json() as { pages: { key: string; path: string; locale?: string }[] }
+  assert.ok(pages.pages.some((p) => p.key === 'article:9:ar-AE' && p.path === '/ar-ae/blog/hair' && p.locale === 'ar-AE'))
+  assert.ok(pages.pages.some((p) => p.key === 'article:9' && p.path === '/ar/blog/hair' && p.locale === undefined))
+
+  const xml = await (await seo.sitemapResponse()).text()
+  assert.match(xml, /<loc>https:\/\/demo\.test\/ar-ae\/blog\/hair<\/loc>/)
+  assert.equal((xml.match(/<url>/g) ?? []).filter(Boolean).length, 4)   // page + 3 versions
+  const sm = await seo.sitemap()
+  assert.ok(sm.some((e) => e.url === 'https://demo.test/ar-ae/blog/hair' && e.alternates?.languages && 'ar-AE' in e.alternates.languages))
+
+  const health = await (await seo.handlers.GET(get('/api/seo/health'), ctx('health'))).json() as { features: string[] }
+  assert.deepEqual(health.features, ['localeUrls'])
+  cleanup()
+})
+
+test('0.2.0: a custom articleLocalePath moves only the non-lead versions', async () => {
+  const { seo, cleanup } = runtime({ articlePath: (l, s) => `/${l}/articles/${s}`, articleLocalePath: (loc, s) => `/c/${loc.toLowerCase()}/${s}` })
+  await seo.handlers.POST(post('/api/seo/sync', snapshot), ctx('sync'))
+  const res = await seo.articleHandler.POST(post('/api/articles', localePayload))
+  const urls = (await res.json() as { results: { remoteUrl: string }[] }).results.map((r) => r.remoteUrl)
+  assert.deepEqual(urls, ['https://demo.test/ar/articles/hair', 'https://demo.test/c/ar-ae/hair', 'https://demo.test/en/articles/hair'])
+  cleanup()
+})

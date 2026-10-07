@@ -3,10 +3,13 @@ import { dirname } from 'node:path'
 import type { SeoStore } from '../store.ts'
 import type { Settings, Snapshot, SnapshotPage, StoredArticle, StoredRedirect } from '../types.ts'
 import { normalizePath } from '../types.ts'
+import { canonicalLocale, isLead, localeOf, withVersionDefaults } from '../locale.ts'
 
 type State = { snapshot: Snapshot | null; articles: StoredArticle[]; hits: Record<string, number>; lastSyncAt: string | null }
 
-const EMPTY: State = { snapshot: null, articles: [], hits: {}, lastSyncAt: null }
+// A function, not a shared constant: `read()` hands its result to callers that mutate
+// `articles`/`hits` in place, and a shared object would leak one store's rows into the next.
+const EMPTY = (): State => ({ snapshot: null, articles: [], hits: {}, lastSyncAt: null })
 
 /**
  * Single-file store. Good for demos, single-container deployments and any site with no database
@@ -19,7 +22,7 @@ export class JsonFileStore implements SeoStore {
   constructor(path: string) { this.path = path }
 
   private read(): State {
-    try { return { ...EMPTY, ...JSON.parse(readFileSync(this.path, 'utf8')) as State } } catch { return { ...EMPTY } }
+    try { return { ...EMPTY(), ...JSON.parse(readFileSync(this.path, 'utf8')) as State } } catch { return EMPTY() }
   }
   private write(state: State): void {
     mkdirSync(dirname(this.path), { recursive: true })
@@ -52,19 +55,42 @@ export class JsonFileStore implements SeoStore {
     return this.read().snapshot?.redirects.find((r) => normalizePath(r.source) === p && r.active) ?? null
   }
 
+  /** Rows written by 0.1.x carry no locale/lead/hreflang; they read back with the defaults. */
+  private articles(): StoredArticle[] { return this.read().articles.map(withVersionDefaults) }
+
   async listArticles(lang?: string): Promise<StoredArticle[]> {
-    const all = this.read().articles
+    const all = this.articles()
     return lang ? all.filter((a) => a.lang === lang) : all
   }
 
-  async findArticleBySlug(lang: string, slug: string): Promise<StoredArticle | null> {
-    return this.read().articles.find((a) => a.lang === lang && a.slug === slug) ?? null
+  async listArticleVersions(externalId: number): Promise<StoredArticle[]> {
+    return this.articles().filter((a) => a.externalId === externalId)
   }
 
-  async upsertArticle(article: StoredArticle): Promise<StoredArticle> {
+  async findArticleBySlug(langOrLocale: string, slug: string): Promise<StoredArticle | null> {
+    const all = this.articles().filter((a) => a.slug === slug)
+    const key = String(langOrLocale ?? '')
+    return all.find((a) => isLead(a) && a.lang.toLowerCase() === key.toLowerCase())
+      ?? all.find((a) => localeOf(a) === canonicalLocale(key))
+      ?? null
+  }
+
+  async upsertArticle(input: StoredArticle): Promise<StoredArticle> {
+    const article = withVersionDefaults(input)
     const state = this.read()
-    const i = state.articles.findIndex((a) => a.externalId === article.externalId && a.lang === article.lang)
-    const publishedAt = i >= 0 ? state.articles[i].publishedAt : article.publishedAt
+    const rows = state.articles.map(withVersionDefaults)
+    const locale = localeOf(article)
+    let i: number
+    if (isLead(article)) {
+      // The lead replaces its language's lead whatever that row's locale was (a 0.1.x row keyed
+      // by language included), and absorbs a non-lead row already stored under its locale.
+      const dup = rows.findIndex((a) => a.externalId === article.externalId && !isLead(a) && localeOf(a) === locale)
+      if (dup >= 0) { rows.splice(dup, 1); state.articles.splice(dup, 1) }
+      i = rows.findIndex((a) => a.externalId === article.externalId && isLead(a) && a.lang === article.lang)
+    } else {
+      i = rows.findIndex((a) => a.externalId === article.externalId && !isLead(a) && localeOf(a) === locale)
+    }
+    const publishedAt = i >= 0 ? rows[i].publishedAt : article.publishedAt
     const row = { ...article, publishedAt }
     if (i >= 0) state.articles[i] = row; else state.articles.push(row)
     this.write(state)

@@ -4,7 +4,7 @@ Tags: seo, redirects, sitemap, robots
 Requires at least: 6.0
 Tested up to: 6.7
 Requires PHP: 8.0
-Stable tag: 0.1.6
+Stable tag: 0.2.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -118,7 +118,24 @@ answered on `template_redirect` itself, but at priority 1, ahead of `redirect_ca
 priority 10 on the same hook. None of these four kinds of request ever reaches WordPress's own
 canonical-redirect logic.
 
+== Per-country pages ==
+
+From 0.2.0 the hub may send several versions of one language (ar-SA, ar-AE, ...). The first (the
+lead) stays at `doitrous_seo_article_path()`; the others are served at `/ar-ae/blog/<slug>`
+(filter `doitrous_seo_article_locale_path`). The theme routes `/<locale>/...` to its article
+template exactly like `/<lang>/...` and looks the article up with
+`doitrous_seo_get_article($langOrLocale, $slug)` — `ar` returns the lead, `ar-ae` the ar-AE
+version, null means 404. `doitrous_seo_parse_locale_prefix($path, $supported)` splits the prefix
+off a path; each article's `hreflang` array holds every alternate. The articles table is upgraded
+(locale column, re-keyed per locale, existing rows backfilled) automatically on the first request
+after the plugin is updated.
+
 == Changelog ==
+
+= 0.2.0 =
+* Per-country pages (hub contract 1.20.0): `locale` on article items, storage per
+  (external_id, locale), receiver-computed hreflang, one sitemap URL per version,
+  `features: ["localeUrls"]` on the health ping, `doitrous_seo_get_article()` for themes.
 
 = 0.1.0 =
 * Initial release: bootstrap, store, resolve/head rendering, routes (B12), redirects, sitemap,

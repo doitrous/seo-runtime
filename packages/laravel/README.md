@@ -37,3 +37,27 @@ with a canonical back to `/tools/{slug}` so the embed never competes with the re
 ranking, and no `X-Frame-Options`/`frame-ancestors` — any origin may frame it, the browser
 default. Both routes' markup are ported byte-for-byte from site-template's
 `packages/tools/embed.ts` and `app/tools/[slug]/embed/page.tsx`.
+
+## Per-country pages (0.2.0)
+
+Run `php artisan migrate`: `2026_10_06_000001_add_locale_to_seo_runtime_articles` adds
+`locale`/`is_lead`/`hreflang` to `seo_runtime_articles`, backfills `locale = lang` and re-keys the
+table to `(external_id, locale)`. Existing articles keep their URLs.
+
+The first version of each language the hub sends (the lead) stays at `article_path`; the other
+versions of that language are served at `/ar-ae/blog/{slug}` (override with
+`seo-runtime.article_locale_path`, `fn (string $locale, string $slug): string`). Route the locale
+prefix to the same article view and look the article up through the facade:
+
+```php
+Route::get('/{lang}/blog/{slug}', function (string $lang, string $slug) {
+    $article = \Doitrous\SeoRuntime\Seo::article($lang, $slug);   // 'ar' → lead, 'ar-ae' → ar-AE
+    abort_if(!$article, 404);
+
+    return view('article', ['article' => $article]);   // $article['hreflang'] = every alternate
+});
+```
+
+`Seo::parseLocalePrefix($path)` splits `/ar-ae/...` into `lang`/`locale`/`rest` (null for a path
+that does not start with one of `seo-runtime.supported`), and `Seo::articleHref($article)` gives
+a version's own path.

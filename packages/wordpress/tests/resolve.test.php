@@ -48,6 +48,7 @@ function wp_json_encode($data, int $options = 0): string|false {
 // --- load the plugin's includes ---------------------------------------------------------
 
 require_once __DIR__ . '/../includes/store.php';
+require_once __DIR__ . '/../includes/locale.php';
 require_once __DIR__ . '/../includes/resolve.php';
 require_once __DIR__ . '/../includes/entities.php';
 require_once __DIR__ . '/../includes/head.php';

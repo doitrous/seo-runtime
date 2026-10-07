@@ -40,6 +40,13 @@ function doitrous_seo_validate_payload(mixed $body): array {
             if (!$ok) return ['error' => "invalid articles[$i].faq"];
         }
         if (array_key_exists('schemaJsonld', $a) && !is_array($a['schemaJsonld'])) return ['error' => "invalid articles[$i].schemaJsonld"];
+        if (array_key_exists('locale', $a) && $a['locale'] !== null) {
+            // The language part must be the item's own language: `ar-AE` under `lang: 'ar'`.
+            $loc = $a['locale'];
+            $ok = is_string($loc) && (doitrous_seo_canonical_locale($loc) === doitrous_seo_canonical_locale($a['lang'])
+                || (doitrous_seo_is_locale_code($loc) && doitrous_seo_lang_of_locale($loc) === doitrous_seo_lang_of_locale($a['lang'])));
+            if (!$ok) return ['error' => "invalid articles[$i].locale"];
+        }
         if (array_key_exists('references', $a)) {
             $ok = is_array($a['references']);
             if ($ok) foreach ($a['references'] as $r) {
@@ -179,12 +186,26 @@ function doitrous_seo_clip(string $text, int $max): string {
     return rtrim($space !== false && $space > $max * 0.6 ? mb_substr($cut, 0, $space) : $cut, " ,;:.-");
 }
 
+/** The item's locale: its own `locale` when sent, else its `lang` (0.1.6 behaviour). */
+function doitrous_seo_item_locale(array $a): string {
+    return doitrous_seo_has_locale($a) ? doitrous_seo_canonical_locale($a['locale']) : $a['lang'];
+}
+
+function doitrous_seo_has_locale(array $a): bool {
+    return is_string($a['locale'] ?? null) && trim($a['locale']) !== '';
+}
+
 function doitrous_seo_to_rows(array $payload, array $supported): array {
     $skipped = [];
     $rows = [];
     $now = gmdate('c');
+    // The lead of each language is its first item (the hub sends the source first, then market
+    // order). A later item carrying the lead's own locale is the same version again.
+    $leadLocale = [];
     foreach ($payload['articles'] as $a) {
         if (!in_array($a['lang'], $supported, true)) { $skipped[] = $a['lang']; continue; }
+        $locale = doitrous_seo_item_locale($a);
+        $leadLocale[$a['lang']] ??= $locale;
         $lede = trim($a['introduction'] ?? '') ?: doitrous_seo_intro($a['bodyMd']);
         $rows[] = [
             'externalId' => $payload['externalId'], 'lang' => $a['lang'], 'slug' => trim($a['slug']),
@@ -208,6 +229,7 @@ function doitrous_seo_to_rows(array $payload, array $supported): array {
                 'sections' => $a['sections'] ?? null, 'introduction' => $a['introduction'] ?? null,
             ], fn ($v) => $v !== null),
             'publishedAt' => $now, 'updatedAt' => $now,
+            'locale' => $locale, 'lead' => $leadLocale[$a['lang']] === $locale, 'hreflang' => [],
         ];
     }
 
@@ -215,30 +237,70 @@ function doitrous_seo_to_rows(array $payload, array $supported): array {
 }
 
 function doitrous_seo_route_articles(): void {
-    $v = doitrous_seo_validate_payload(doitrous_seo_read_body());
-    if (isset($v['error'])) doitrous_seo_json(['error' => $v['error']], 400);
-
     $supported = (array) apply_filters('doitrous_seo_supported_languages', [doitrous_seo_site_lang()]);
-    ['skipped' => $skipped, 'articles' => $rows] = doitrous_seo_to_rows($v['payload'], $supported);
-    if (!$rows) doitrous_seo_json(['error' => 'no supported languages'], 400);
+    $out = doitrous_seo_ingest(doitrous_seo_read_body(), $supported);
+    doitrous_seo_json($out['body'], $out['status']);
+}
 
+/** ingestArticles in core-js's articles.ts: `['status' => int, 'body' => array]`, no output. */
+function doitrous_seo_ingest(mixed $body, array $supported): array {
+    $v = doitrous_seo_validate_payload($body);
+    if (isset($v['error'])) return ['status' => 400, 'body' => ['error' => $v['error']]];
+
+    ['skipped' => $skipped, 'articles' => $rows] = doitrous_seo_to_rows($v['payload'], $supported);
+    if (!$rows) return ['status' => 400, 'body' => ['error' => 'no supported languages']];
+
+    // The site's base URL FOR THAT LANGUAGE, not just the first configured origin —
+    // doitrous_seo_absolute_url already carries that fallback chain (resolve.php).
+    $settings = doitrous_seo_get_settings() ?? DOITROUS_SEO_EMPTY_SETTINGS;
+    $urlOf = fn (array $a) => doitrous_seo_absolute_url($settings, $a['lang'], doitrous_seo_article_version_path($a));
+
+    // Checked per URL space: a lead against its language's leads, any other version against its
+    // own locale.
     foreach ($rows as $row) {
-        $clash = doitrous_seo_find_article_by_slug($row['lang'], $row['slug']);
+        $lead = doitrous_seo_is_lead($row);
+        $clash = doitrous_seo_find_article_by_slug($lead ? $row['lang'] : $row['locale'], $row['slug']);
         if ($clash && $clash['externalId'] !== $row['externalId']) {
-            doitrous_seo_json(['error' => 'slug_taken', 'slug' => $row['slug'], 'lang' => $row['lang']], 409);
+            return ['status' => 409, 'body' => ['error' => 'slug_taken', 'slug' => $row['slug'], 'lang' => $row['lang']]
+                + ($lead ? [] : ['locale' => $row['locale']])];
         }
     }
 
-    $settings = doitrous_seo_get_settings() ?? DOITROUS_SEO_EMPTY_SETTINGS;
+    // hreflang from every version this site holds for the externalId once this payload lands:
+    // the payload's own versions first (the source is first), then any stored earlier.
+    $incoming = [];
+    foreach ($rows as $row) $incoming[$row['locale']] = $row;
+    $incoming = array_values($incoming);
+    $untouched = array_values(array_filter(doitrous_seo_list_article_versions($v['payload']['externalId']), function (array $old) use ($incoming) {
+        foreach ($incoming as $a) {
+            if (doitrous_seo_locale_of($a) === doitrous_seo_locale_of($old)) return false;
+            if (doitrous_seo_is_lead($a) && doitrous_seo_is_lead($old) && $a['lang'] === $old['lang']) return false;
+        }
+
+        return true;
+    }));
+    $legacy = true;
+    foreach ($v['payload']['articles'] as $item) if (doitrous_seo_has_locale($item)) $legacy = false;
+    $hreflang = doitrous_seo_article_hreflang(array_merge($incoming, $untouched), $urlOf, $legacy);
+
     $results = [];
     foreach ($rows as $row) {
+        $row['hreflang'] = $hreflang;
         doitrous_seo_upsert_article($row);
-        $results[] = [
-            'lang' => $row['lang'], 'remoteId' => $row['externalId'] . ':' . $row['lang'],
-            // The site's base URL FOR THAT LANGUAGE, not just the first configured origin —
-            // doitrous_seo_absolute_url already carries that fallback chain (resolve.php).
-            'remoteUrl' => doitrous_seo_absolute_url($settings, $row['lang'], doitrous_seo_article_path($row['lang'], $row['slug'])),
-        ];
+        $lead = doitrous_seo_is_lead($row);
+        $sent = null;
+        foreach ($v['payload']['articles'] as $item) {
+            if ($item['lang'] === $row['lang'] && doitrous_seo_item_locale($item) === $row['locale']) { $sent = $item; break; }
+        }
+        $results[] = ['lang' => $row['lang']]
+            // Only echoed when the hub sent one, so a 0.1.6-shaped payload gets a 0.1.6 answer.
+            + ($sent !== null && doitrous_seo_has_locale($sent) ? ['locale' => $sent['locale']] : [])
+            + ['remoteId' => $row['externalId'] . ':' . ($lead ? $row['lang'] : $row['locale']), 'remoteUrl' => $urlOf($row)];
     }
-    doitrous_seo_json(['results' => $results, 'skipped' => $skipped]);
+    // Versions stored by an earlier payload keep their content; only their hreflang moves.
+    foreach ($untouched as $old) {
+        if (($old['hreflang'] ?? []) != $hreflang) doitrous_seo_upsert_article(array_merge($old, ['hreflang' => $hreflang]));
+    }
+
+    return ['status' => 200, 'body' => ['results' => $results, 'skipped' => $skipped]];
 }

@@ -58,3 +58,32 @@ root pulls in the full core barrel (node:fs/node:sqlite/node:crypto stores), whi
 
 Set `skipTrailingSlashRedirect: true` in `next.config.ts` — without it, Next's own trailing-slash
 308 fires before `proxy.ts` ever sees the request. See `packages/CONTRACT.md`'s Redirects section.
+
+## Per-country pages (0.2.0)
+
+When the hub sends several versions of one language (`ar-SA`, `ar-AE`, …), the first (the lead)
+stays at `articlePath(lang, slug)` and the rest are served at `/ar-ae/blog/<slug>` (override with
+`createSeo({ articleLocalePath: (locale, slug) => ... })`). Your `app/[lang]/blog/[slug]` route
+already receives `ar-ae` as `params.lang`; look the article up with the runtime instead of by
+language:
+
+    // app/[lang]/blog/[slug]/page.tsx
+    import { notFound } from 'next/navigation'
+    import { seo } from '@/lib/seo'
+
+    export async function generateMetadata({ params }) {
+      const { lang, slug } = await params
+      return (await seo.articleMetadata(lang, slug)) ?? {}   // canonical + every hreflang
+    }
+
+    export default async function Article({ params }) {
+      const { lang, slug } = await params
+      const article = await seo.article(lang, slug)          // 'ar' → lead, 'ar-ae' → ar-AE
+      if (!article) notFound()
+      return <article dir={article.lang === 'ar' ? 'rtl' : 'ltr'} dangerouslySetInnerHTML={{ __html: article.bodyHtml }} />
+    }
+
+If the layout validates `params.lang` against the site's languages, accept a locale too:
+`parseLocalePrefix('/' + params.lang, supported)` (also exported from
+`@omary98/seo-runtime-next/edge` for `proxy.ts`) returns `{lang, locale}` or null.
+`seo.articleHref(article)` gives a version's own path.

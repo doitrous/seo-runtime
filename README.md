@@ -77,7 +77,7 @@ publish:
 
 ```
 composer config repositories.seo-runtime vcs https://github.com/doitrous/seo-runtime
-composer require doitrous/seo-runtime-laravel:^0.1
+composer require doitrous/seo-runtime-laravel:^0.2
 ```
 
 The service provider (`SeoRuntimeServiceProvider`) and the `Seo` facade auto-discover; nothing to
@@ -143,7 +143,7 @@ Pick one:
 - **Adapter type `custom`, URL = the site's root URL.** The hub POSTs every language version to
   `<site URL>/api/articles` with this site's runtime secret (the same `SEO_HUB_SECRET` the plugin
   already has). The plugin stores the article in its own table and lists it in the sitemap; the
-  theme renders the page (`doitrous_seo_find_article_by_slug()`). A 404/405 from the hub's job
+  theme renders the page (`doitrous_seo_get_article()`, which also resolves `/<locale>/…` URLs — see "Per-country pages"). A 404/405 from the hub's job
   page means the plugin is not active or the URL is wrong; a 401/403 means the secret differs.
 - **Adapter type `wordpress` (site URL, WordPress user, application password, category).** The
   hub publishes real WordPress posts over the REST API (`/wp-json/wp/v2`), writing the
@@ -151,6 +151,49 @@ Pick one:
   `/api/articles` here, so in this mode the plugin only serves meta/head tags, redirects,
   sitemap/robots and hreflang for what WordPress already owns. Create the application password
   under Users → your admin user → Application Passwords.
+
+## Per-country pages (0.2.0)
+
+From 0.2.0 a site can serve one page per country for countries that share a language (ar-SA,
+ar-AE, ar-LY, ar-EG), each with its own native keyword. The hub turns this on per site (its
+`localeUrls` flag) only after the runtime advertises `features: ["localeUrls"]` on the health
+ping, which every 0.2.0 package does. Until then nothing changes: a payload without `locale`
+behaves exactly as 0.1.6. See `packages/CONTRACT.md`'s "Per-country pages" section for the full
+rules.
+
+- The **lead** version of each language (the first one the hub sends, the source) keeps today's
+  URL: `/ar/blog/<slug>`, or whatever `articlePath` says.
+- Every **other** version of that language is served under the lowercase locale in place of the
+  language: `/ar-ae/blog/<slug>`, `/ar-ly/blog/<slug>`. A language served unprefixed gets the
+  locale prepended (`/blog/x` → `/en-us/blog/x`). Override with `articleLocalePath(locale, slug)`
+  (Laravel `seo-runtime.article_locale_path`, WordPress the `doitrous_seo_article_locale_path`
+  filter).
+- The runtime stores every version, computes hreflang for all of them (every locale, each
+  language → its lead, `x-default` → the source) and lists each in the sitemap.
+
+**What the host site must do:** route `/<locale>/…` to its article view, exactly like
+`/<lang>/…`, and look the article up with the runtime's helper, passing the first path segment
+unchanged. It returns the lead for a plain language, the locale's own version for a locale, and
+null (answer 404) otherwise — including for a lead requested by its locale, which lives at the
+language URL only.
+
+| Stack | Article lookup | Path parsing / URL |
+|---|---|---|
+| core-js | `getArticle(store, langOrLocale, slug)` | `parseLocalePrefix(pathname, supported?)`, `articleVersionPath(article, articlePath, articleLocalePath?)` |
+| Next | `seo.article(params.lang, params.slug)`; `seo.articleMetadata(params.lang, params.slug)` for `generateMetadata` (canonical + hreflang) | `parseLocalePrefix` (also from `/edge`), `seo.articleHref(article)` |
+| Express | `res.locals.getArticle(req.params.lang, req.params.slug)` | `parseLocalePrefix`, `res.locals.articleHref(article)` |
+| Laravel | `Seo::article($lang, $slug)` | `Seo::parseLocalePrefix($path)`, `Seo::articleHref($article)` |
+| WordPress | `doitrous_seo_get_article($lang, $slug)` | `doitrous_seo_parse_locale_prefix($path)`, `doitrous_seo_article_version_path($article)` |
+
+A Next `app/[lang]/blog/[slug]/page.tsx` already receives `ar-ae` as `params.lang`; an Express
+`app.get('/:lang/blog/:slug', …)` or a Laravel `Route::get('/{lang}/blog/{slug}', …)` likewise —
+the only change is to stop treating that segment as a language and pass it to the helper (and,
+when the site validates it against its language list, accept a locale whose language is listed;
+`parseLocalePrefix(path, supported)` does exactly that check). Render the stored article's
+`hreflang` map as the page's alternates (Next's `articleMetadata` does it for you).
+
+A site that keeps articles in its own `SeoStore` must key them by `(externalId, locale)` and make
+`findArticleBySlug(langOrLocale, slug)` accept a locale before the hub's flag is turned on.
 
 ## IndexNow and the web-vitals beacon
 
@@ -226,10 +269,12 @@ embedded from any of these sites behaves identically.
 
 ## Releasing
 
-1. Bump the version in `packages/core-js`, `packages/next`, `packages/express`,
-   `packages/laravel/composer.json` and `packages/wordpress/doitrous-seo.php` — one version
-   number across all five, and the same number in the `@omary98/seo-runtime-core` dependency of
-   `-next` and `-express`.
+1. Bump the version in `packages/core-js` (`package.json` and `RUNTIME_VERSION` in
+   `src/index.ts`), `packages/next`, `packages/express`, `packages/conformance`,
+   `packages/laravel/src/SeoManager.php` (`VERSION`) and `packages/wordpress/doitrous-seo.php`
+   (header + `DOITROUS_SEO_VERSION`, and `readme.txt`'s stable tag) — one version number across
+   all of them, and the same number in the `@omary98/seo-runtime-core` dependency of `-next`,
+   `-express` and the examples. Add a `CHANGELOG.md` entry.
 2. `git tag vX.Y.Z && git push --tags`. The `publish-npm` workflow tests, builds and publishes the
    three npm packages in dependency order (core, then next, then express), and refuses to publish
    if the tag doesn't match every package's version. The `release-wp` workflow builds

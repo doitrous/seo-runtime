@@ -70,6 +70,7 @@ function doitrous_seo_article_path(string $lang, string $slug): string {
 // --- load the plugin's includes ---------------------------------------------------------
 
 require_once __DIR__ . '/../includes/store.php';
+require_once __DIR__ . '/../includes/locale.php';
 require_once __DIR__ . '/../includes/resolve.php';
 require_once __DIR__ . '/../includes/sitemap.php';
 require_once __DIR__ . '/../includes/articles.php';

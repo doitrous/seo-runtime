@@ -1,7 +1,7 @@
 import type { Metadata, MetadataRoute } from 'next'
 import {
-  DEFAULT_ARTICLE_PATH, jsonLdScript, resolveSeo, robotsTxt, sitemapEntries, sitemapXml,
-  startSync, type ResolvedSeo,
+  absoluteUrl, articleVersionPath, DEFAULT_ARTICLE_PATH, EMPTY_SETTINGS, getArticle, jsonLdScript, resolveSeo,
+  robotsTxt, sitemapEntries, sitemapXml, startSync, type ResolvedSeo, type StoredArticle,
   RUNTIME_VERSION,
 } from '@omary98/seo-runtime-core'
 import { handleSeoGet, handleSeoPost, MAX_BODY_BYTES, type SeoConfig } from './handlers.ts'
@@ -14,6 +14,11 @@ export { withSeoRedirects } from './redirects.ts'
 // /editorial-guidelines pages call these directly (see site-template's app/help/page.tsx and
 // app/editorial-guidelines/page.tsx) without needing a second import from the core package.
 export { editorialBodyHtml, helpIndexBodyHtml, localeFreeAlternates } from '@omary98/seo-runtime-core'
+// Per-country pages (0.2.0): what an article route needs to serve `/<locale>/...`.
+export {
+  canonicalLocale, isLocaleCode, langOfLocale, parseLocalePrefix,
+  type ArticleLocalePath, type LocalePrefix, type StoredArticle,
+} from '@omary98/seo-runtime-core'
 
 // Derived, never hand-written — a hand-written copy goes stale the moment createSeo grows a
 // member.
@@ -45,7 +50,7 @@ export function createSeo(config: SeoConfig) {
   const allEntries = async () => {
     const snapshot = await config.store.getSnapshot()
     if (!snapshot) return { snapshot: null, entries: [] as ReturnType<typeof sitemapEntries> }
-    return { snapshot, entries: sitemapEntries(snapshot, await config.store.listArticles(), config.articlePath ?? DEFAULT_ARTICLE_PATH) }
+    return { snapshot, entries: sitemapEntries(snapshot, await config.store.listArticles(), config.articlePath ?? DEFAULT_ARTICLE_PATH, config.articleLocalePath) }
   }
 
   /**
@@ -67,6 +72,37 @@ export function createSeo(config: SeoConfig) {
     }))
   }
 
+  /**
+   * Per-country pages (0.2.0). `langOrLocale` is the first path segment of the article URL —
+   * in an `app/[lang]/blog/[slug]` route that is `params.lang`, which now also receives `ar-ae`:
+   * a plain language returns that language's lead version, a locale (`ar-ae`/`ar-AE`) the version
+   * stored for it. Null for an unknown slug, and for a locale that is its language's lead (that
+   * version is served at the language URL only) — answer `notFound()`.
+   */
+  const article = (langOrLocale: string, slug: string): Promise<StoredArticle | null> =>
+    getArticle(config.store, langOrLocale, safeDecode(slug))
+
+  /** The site-relative URL a stored version is served at (its lead or locale URL). */
+  const articleHref = (a: StoredArticle): string =>
+    articleVersionPath(a, config.articlePath ?? DEFAULT_ARTICLE_PATH, config.articleLocalePath)
+
+  /**
+   * `generateMetadata` for an article route: title/description from the stored version, the
+   * canonical at its own URL and `alternates.languages` = the hreflang set computed at ingest
+   * (every locale, each language's lead, x-default). Null when `article()` is.
+   */
+  const articleMetadata = async (langOrLocale: string, slug: string): Promise<Metadata | null> => {
+    const a = await article(langOrLocale, slug)
+    if (!a) return null
+    const settings = (await config.store.getSettings()) ?? EMPTY_SETTINGS
+    const canonical = absoluteUrl(settings, a.lang, articleHref(a))
+    return {
+      title: a.metaTitle || a.title, description: a.metaDescription,
+      alternates: { canonical, languages: a.hreflang ?? {} },
+      openGraph: { title: a.og.title || a.metaTitle || a.title, description: a.og.description || a.metaDescription, url: canonical, images: a.og.image ? [a.og.image] : [] },
+    }
+  }
+
   const robots = async () => new Response(robotsTxt(await config.store.getSnapshot()), { headers: { 'content-type': 'text/plain; charset=utf-8' } })
 
   /** `app/sitemap.xml/route.ts` — the single `/sitemap.xml` file, rendered by core's `sitemapXml`. */
@@ -77,6 +113,7 @@ export function createSeo(config: SeoConfig) {
 
   return {
     config, version, resolve, metadata, sitemap, robots, sitemapResponse,
+    article, articleHref, articleMetadata,
     jsonLdScript,
     handlers: {
       GET: async (req: Request, ctx: { params: Promise<{ seo: string[] }> }) => handleSeoGet(config, req, (await ctx.params).seo.at(-1) ?? ''),
@@ -90,6 +127,11 @@ export function createSeo(config: SeoConfig) {
     },
     start: () => startSync(config.store, { version, share: config.share === true }),
   }
+}
+
+/** Next may hand a non-ASCII `[slug]` param over percent-encoded; an already-decoded one passes through. */
+function safeDecode(s: string): string {
+  try { return decodeURIComponent(s) } catch { return s }
 }
 
 export async function seoMetadata(runtime: SeoRuntime, input: { path: string; lang: string }) {

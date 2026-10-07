@@ -5,12 +5,13 @@ namespace Doitrous\SeoRuntime;
 use Doitrous\SeoRuntime\Store\EloquentStore;
 use Doitrous\SeoRuntime\Support\Articles;
 use Doitrous\SeoRuntime\Support\Entities;
+use Doitrous\SeoRuntime\Support\Locale;
 use Doitrous\SeoRuntime\Support\Sitemap;
 use Doitrous\SeoRuntime\Support\Snapshot;
 
 class SeoManager
 {
-    public const VERSION = '0.1.6';
+    public const VERSION = '0.2.0';
 
     /** Hub calls must never hang a request: 5 s to connect, 10 s in total. */
     public const HUB_CONNECT_TIMEOUT = 5;
@@ -85,6 +86,28 @@ class SeoManager
     public function ingest(mixed $payload): array
     {
         return Articles::ingest($this->store, $payload, (array) config('seo-runtime.supported', ['en']));
+    }
+
+    /**
+     * Per-country pages (0.2.0): the host's article lookup. `$langOrLocale` is the first segment
+     * of the article URL (`ar` → that language's lead, `ar-ae` → the ar-AE version). Null for an
+     * unknown slug or for a locale that names its language's lead — answer 404.
+     */
+    public function article(string $langOrLocale, string $slug): ?array
+    {
+        return Articles::find($this->store, $langOrLocale, $slug);
+    }
+
+    /** The site-relative URL a stored version is served at (its language or locale URL). */
+    public function articleHref(array $article): string
+    {
+        return Locale::versionPath($article);
+    }
+
+    /** `/ar-ae/blog/x` → ['segment' => 'ar-ae', 'lang' => 'ar', 'locale' => 'ar-AE', 'rest' => '/blog/x']. */
+    public function parseLocalePrefix(string $pathname): ?array
+    {
+        return Locale::parsePrefix($pathname, (array) config('seo-runtime.supported', ['en']));
     }
 
     /** v2 content pages, rendered by the package itself. Null when the slug (and lang) don't match. */

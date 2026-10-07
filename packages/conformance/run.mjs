@@ -28,6 +28,8 @@ const suiteDir = join(dirname(fileURLToPath(import.meta.url)), 'suite')
 // invocation) is what guarantees that: each spawnSync call blocks until that file's process exits.
 const allFiles = [
   'sync', 'resolve', 'redirects', 'sitemap', 'robots', 'articles',
+  // 0.2.0: per-country pages (several locales of one language, receiver-side hreflang).
+  'locales',
   // Phase 5: v2 fields/pages, AI-readability, and the pending/approve proxy. `pending` needs the
   // demo started with SEO_HUB_URL pointing at mock-hub.mjs — see that file's own docblock.
   'entities', 'readability', 'pending',
