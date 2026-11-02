@@ -153,6 +153,13 @@ check('the sitemap lists one url per version', $locs === ['https://x.com/ar-ae/b
 $ae = array_values(array_filter($entries, fn ($e) => $e['loc'] === 'https://x.com/ar-ae/blog/x'))[0];
 check('a locale url carries the full alternates with x-default = the source', $ae['alternates'] == $expected);
 
+$asPage = fn (string $lang, string $path) => ['key' => 'article:9', 'type' => 'article', 'lang' => $lang, 'path' => $path, 'group' => 'article:9', 'title' => 'T', 'updatedAt' => '2026-09-01T00:00:00.000Z', 'seo' => ['index' => true, 'includeInSitemap' => true, 'priority' => 0.8]];
+$asPages = [$asPage('ar', '/ar/blog/x'), $asPage('ar', '/ar-ae/blog/x/'), $asPage('en', '/en/blog/x')];
+$described = doitrous_seo_sitemap_entries(['settings' => $settings, 'pages' => $asPages], doitrous_seo_list_articles());
+$pageEntries = array_values(array_filter($described, fn ($e) => $e['lastmod'] === '2026-09-01'));
+check('a snapshot page at a stored version url is listed once', count($described) === count($locs) && count($pageEntries) === 3);
+check('that page takes the article hreflang set, not its page group', array_filter($pageEntries, fn ($e) => $e['alternates'] != $expected) === []);
+
 // === slug clash per locale ==================================================================
 
 check('another job may reuse a slug only stored under a locale, as its lead', doitrous_seo_ingest(['externalId' => 10, 'articles' => [$item('ar', 'ar-SA', 'y'), $item('ar', 'ar-AE', 'b')]], ['ar'])['status'] === 200
