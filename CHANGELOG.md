@@ -3,6 +3,16 @@
 One version across every package (`@omary98/seo-runtime-core`, `-next`, `-express`,
 `doitrous/seo-runtime-laravel`, the `doitrous-seo` WordPress plugin).
 
+## 0.2.2 — per-country article URLs name themselves in the sitemap
+
+- **Fix.** A snapshot page whose URL is a stored article version now carries that article's full
+  hreflang set in the sitemap (core-js, Laravel, WordPress). Its page group is keyed by plain
+  `lang`, so `/blog/ar-ae/x` listed only `ar`, `en` and `x-default`, never itself. The page is still
+  the entry, with its own `lastmod`, `priority` and noindex. `x-default` on these pages now follows
+  the article's rule (the source version, or `en` for a payload without `locale`).
+- **Contract.** Documents the optional `group` on `GET /api/seo/pages`.
+- Conformance: new case in `suite/locales.test.mjs`.
+
 ## 0.2.0 — per-country pages (hub contract 1.20.0)
 
 Several pages per language, one per country (ar-SA, ar-AE, ar-LY, ar-EG). See the root README's

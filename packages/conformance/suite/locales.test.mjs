@@ -48,6 +48,26 @@ test('the sitemap lists every version with the full hreflang set and x-default =
   }
 })
 
+// The hub registers every version as a snapshot page under one group, which holds only one URL
+// per plain `lang`. The page stays the entry; its alternates come from the stored article.
+test('a version the hub lists as a snapshot page keeps the full hreflang set, naming itself', async () => {
+  await articles(localePayload())
+  const s = snapshot()
+  const asPage = (lang, path) => ({ ...s.pages[0], key: 'article:951', type: 'article', lang, path, group: 'article:951' })
+  s.pages = [...s.pages, asPage('ar', `/ar/blog/${SLUG}`), asPage('ar', `/ar-ae/blog/${SLUG}`), asPage('en', `/en/blog/${SLUG}`)]
+  assert.equal((await sync(s)).status, 200)
+  const xml = await (await fetch(`${BASE}/sitemap.xml`)).text()
+  await sync(snapshot())   // restore the fixture's pages for the rest of the suite
+  const urls = (xml.match(/<url>[\s\S]*?<\/url>/g) ?? []).filter((u) => u.includes(`/${SLUG}</loc>`))
+  assert.equal(urls.length, 3)
+  for (const u of urls) {
+    assert.match(u, /<lastmod>2026-09-01<\/lastmod>/)   // the page's date, so the page is the entry
+    assert.match(u, new RegExp(`hreflang="ar-AE" href="https?://[^"]+/ar-ae/blog/${SLUG}"`))
+    assert.match(u, new RegExp(`hreflang="ar-SA" href="https?://[^"]+/ar/blog/${SLUG}"`))
+    assert.match(u, new RegExp(`hreflang="x-default" href="https?://[^"]+/ar/blog/${SLUG}"`))
+  }
+})
+
 test('the page list carries one article page per version', async () => {
   await articles(localePayload())
   const { pages } = await (await fetch(`${BASE}/api/seo/pages`, { headers: auth })).json()

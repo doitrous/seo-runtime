@@ -97,6 +97,26 @@ class SitemapTest extends TestCase
         $this->assertStringNotContainsString('<lastmod>', Sitemap::xml($store));
     }
 
+    public function test_a_snapshot_page_at_a_stored_version_url_takes_the_article_hreflang_set(): void
+    {
+        $store = $this->store();
+        $s = $this->twoLanguageSnapshot(['version' => 24]);
+        $asPage = fn (string $lang, string $path) => ['key' => 'article:9', 'type' => 'article', 'lang' => $lang, 'path' => $path, 'group' => 'article:9'] + $s['pages'][0];
+        $s['pages'] = [$asPage('ar', '/ar/blog/x'), $asPage('ar', '/ar-ae/blog/x'), $asPage('en', '/en/blog/x')];
+        Snapshot::apply($store, $s);
+        $item = fn (string $lang, string $locale) => ['lang' => $lang, 'locale' => $locale, 'title' => $locale, 'slug' => 'x', 'bodyMd' => "# T\n\nBody."];
+        Articles::ingest($store, ['externalId' => 9, 'articles' => [$item('ar', 'ar-SA'), $item('ar', 'ar-AE'), $item('en', 'en-US')]], ['en', 'ar']);
+
+        $entries = Sitemap::entries($store->getSnapshot(), $store->listArticles());
+        $this->assertSame(['https://x.com/ar/blog/x', 'https://x.com/ar-ae/blog/x', 'https://x.com/en/blog/x'], array_column($entries, 'loc'));
+        foreach ($entries as $e) {
+            $this->assertEquals([
+                'ar-SA' => 'https://x.com/ar/blog/x', 'ar-AE' => 'https://x.com/ar-ae/blog/x', 'en-US' => 'https://x.com/en/blog/x',
+                'ar' => 'https://x.com/ar/blog/x', 'en' => 'https://x.com/en/blog/x', 'x-default' => 'https://x.com/ar/blog/x',
+            ], $e['alternates']);
+        }
+    }
+
     public function test_an_article_is_listed_at_the_configured_article_path(): void
     {
         $store = $this->store();

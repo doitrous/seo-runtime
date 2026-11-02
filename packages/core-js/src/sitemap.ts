@@ -47,6 +47,23 @@ export function sitemapEntries(
   const s = snapshot.settings
   const out: SitemapEntry[] = []
 
+  // Grouped by external id, not slug: two different jobs may use the same slug in different
+  // languages and must not become each other's alternates. One <url> per stored version (per
+  // locale, 0.2.0), each carrying the full hreflang set of its externalId.
+  const byJob = new Map<number, StoredArticle[]>()
+  for (const raw of articles) {
+    const a = withVersionDefaults(raw)
+    const g = byJob.get(a.externalId) ?? []
+    g.push(a)
+    byJob.set(a.externalId, g)
+  }
+  const urlOf = (a: StoredArticle) => absoluteUrl(s, a.lang, articleVersionPath(a, articlePath, articleLocalePath))
+  const jobs = [...byJob.values()].map((group) => ({ group, alternates: articleHreflang(sourceFirst(group), urlOf, isLegacyGroup(group)) }))
+  const articleAlternates = new Map<string, Record<string, string>>()
+  for (const { group, alternates } of jobs) {
+    for (const a of group) articleAlternates.set(urlOf(a).replace(/\/+$/, ''), alternates)
+  }
+
   const byGroup = new Map<string, typeof snapshot.pages>()
   for (const p of snapshot.pages) {
     const g = byGroup.get(p.group) ?? []
@@ -59,30 +76,20 @@ export function sitemapEntries(
     const alternates: Record<string, string> = {}
     for (const g of group) alternates[g.lang] = absoluteUrl(s, g.lang, g.path)
     const typeDefaults = s.pageDefaults[p.type] ?? DEFAULT_PAGE_DEFAULTS
+    const loc = absoluteUrl(s, p.lang, p.path)
     out.push({
-      loc: absoluteUrl(s, p.lang, p.path), lastmod: day(p.updatedAt),
+      loc, lastmod: day(p.updatedAt),
       changefreq: typeDefaults.changefreq,
       priority: p.seo.priority ?? typeDefaults.priority ?? 0.5,
-      alternates: withDefault(alternates),
+      // A page group holds one URL per plain lang, so it cannot name a per-country version.
+      alternates: articleAlternates.get(loc.replace(/\/+$/, '')) ?? withDefault(alternates),
     })
   }
 
-  // Grouped by external id, not slug: two different jobs may use the same slug in different
-  // languages and must not become each other's alternates. One <url> per stored version (per
-  // locale, 0.2.0), each carrying the full hreflang set of its externalId.
-  const byJob = new Map<number, StoredArticle[]>()
-  for (const raw of articles) {
-    const a = withVersionDefaults(raw)
-    const g = byJob.get(a.externalId) ?? []
-    g.push(a)
-    byJob.set(a.externalId, g)
-  }
-  const urlOf = (a: StoredArticle) => absoluteUrl(s, a.lang, articleVersionPath(a, articlePath, articleLocalePath))
   // The hub registers every published article as a snapshot page too. When it has, the page is
   // the entry (or, when noindexed, the reason there is none), so the stored article is skipped.
   const described = new Set(snapshot.pages.map((p) => absoluteUrl(s, p.lang, p.path).replace(/\/+$/, '')))
-  for (const group of byJob.values()) {
-    const alternates = articleHreflang(sourceFirst(group), urlOf, isLegacyGroup(group))
+  for (const { group, alternates } of jobs) {
     for (const a of group) {
       if (described.has(urlOf(a).replace(/\/+$/, ''))) continue
       out.push({

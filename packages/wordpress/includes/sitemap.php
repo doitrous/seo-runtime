@@ -33,6 +33,20 @@ function doitrous_seo_sitemap_entries(array $snapshot, array $articles): array {
     if (!($s['indexingEnabled'] ?? true)) return [];
     $out = [];
 
+    // Grouped by external id, not slug: two different jobs may reuse the same slug in different
+    // languages and must not become each other's alternates. One entry per stored version (per
+    // locale, 0.2.0), each carrying the full hreflang set of its externalId.
+    $byJob = [];
+    foreach ($articles as $a) $byJob[$a['externalId']][] = $a;
+    $urlOf = fn (array $a) => doitrous_seo_absolute_url($s, $a['lang'], doitrous_seo_article_version_path($a));
+    $jobs = [];
+    $articleAlternates = [];
+    foreach ($byJob as $group) {
+        $alternates = doitrous_seo_article_hreflang(doitrous_seo_source_first($group), $urlOf, doitrous_seo_is_legacy_group($group));
+        $jobs[] = [$group, $alternates];
+        foreach ($group as $a) $articleAlternates[rtrim($urlOf($a), '/')] = $alternates;
+    }
+
     $byGroup = [];
     foreach ($snapshot['pages'] as $p) $byGroup[$p['group']][] = $p;
     foreach ($snapshot['pages'] as $p) {
@@ -41,28 +55,23 @@ function doitrous_seo_sitemap_entries(array $snapshot, array $articles): array {
         $alternates = [];
         foreach ($group as $g) $alternates[$g['lang']] = doitrous_seo_absolute_url($s, $g['lang'], $g['path']);
         $typeDefaults = $s['pageDefaults'][$p['type']] ?? DOITROUS_SEO_PAGE_DEFAULTS;
+        $loc = doitrous_seo_absolute_url($s, $p['lang'], $p['path']);
         $out[] = [
-            'loc' => doitrous_seo_absolute_url($s, $p['lang'], $p['path']),
+            'loc' => $loc,
             'lastmod' => doitrous_seo_sitemap_lastmod($p['updatedAt']),
             'changefreq' => $typeDefaults['changefreq'],
             'priority' => $p['seo']['priority'] ?? $typeDefaults['priority'] ?? 0.5,
-            'alternates' => doitrous_seo_with_default($alternates),
+            // A page group holds one URL per plain lang, so it cannot name a per-country version.
+            'alternates' => $articleAlternates[rtrim($loc, '/')] ?? doitrous_seo_with_default($alternates),
         ];
     }
 
-    // Grouped by external id, not slug: two different jobs may reuse the same slug in different
-    // languages and must not become each other's alternates. One entry per stored version (per
-    // locale, 0.2.0), each carrying the full hreflang set of its externalId.
     $articleDefaults = $s['pageDefaults']['article'] ?? DOITROUS_SEO_PAGE_DEFAULTS;
-    $byJob = [];
-    foreach ($articles as $a) $byJob[$a['externalId']][] = $a;
-    $urlOf = fn (array $a) => doitrous_seo_absolute_url($s, $a['lang'], doitrous_seo_article_version_path($a));
     // The hub registers every published article as a snapshot page too; when it has, the page is
     // the entry (or, when noindexed, the reason there is none), so the article is skipped.
     $described = [];
     foreach ($snapshot['pages'] as $p) $described[rtrim(doitrous_seo_absolute_url($s, $p['lang'], $p['path']), '/')] = true;
-    foreach ($byJob as $group) {
-        $alternates = doitrous_seo_article_hreflang(doitrous_seo_source_first($group), $urlOf, doitrous_seo_is_legacy_group($group));
+    foreach ($jobs as [$group, $alternates]) {
         foreach ($group as $a) {
             if (isset($described[rtrim($urlOf($a), '/')])) continue;
             $out[] = [

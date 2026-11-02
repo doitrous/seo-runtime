@@ -35,6 +35,20 @@ class Sitemap
         if (!($s['indexingEnabled'] ?? true)) return [];
         $out = [];
 
+        // Grouped by external id, not slug: two jobs may reuse a slug in different languages and
+        // must not become each other's alternates. One entry per stored version (per locale,
+        // 0.2.0), each carrying the full hreflang set of its externalId.
+        $byJob = [];
+        foreach ($articles as $a) $byJob[$a['externalId']][] = $a;
+        $urlOf = fn (array $a) => Snapshot::absoluteUrl($s, $a['lang'], Locale::versionPath($a));
+        $jobs = [];
+        $articleAlternates = [];
+        foreach ($byJob as $group) {
+            $alternates = Locale::hreflang(self::sourceFirst($group), $urlOf, self::isLegacyGroup($group));
+            $jobs[] = [$group, $alternates];
+            foreach ($group as $a) $articleAlternates[rtrim($urlOf($a), '/')] = $alternates;
+        }
+
         $byGroup = [];
         foreach ($snapshot['pages'] as $p) $byGroup[$p['group']][] = $p;
 
@@ -44,28 +58,23 @@ class Sitemap
             $alternates = [];
             foreach ($group as $g) $alternates[$g['lang']] = Snapshot::absoluteUrl($s, $g['lang'], $g['path']);
             $typeDefaults = $s['pageDefaults'][$p['type']] ?? Snapshot::DEFAULT_PAGE_DEFAULTS;
+            $loc = Snapshot::absoluteUrl($s, $p['lang'], $p['path']);
             $out[] = [
-                'loc' => Snapshot::absoluteUrl($s, $p['lang'], $p['path']),
+                'loc' => $loc,
                 'lastmod' => self::day($p['updatedAt']),
                 'changefreq' => $typeDefaults['changefreq'],
                 'priority' => $p['seo']['priority'] ?? $typeDefaults['priority'] ?? 0.5,
-                'alternates' => self::withDefault($alternates),
+                // A page group holds one URL per plain lang, so it cannot name a per-country version.
+                'alternates' => $articleAlternates[rtrim($loc, '/')] ?? self::withDefault($alternates),
             ];
         }
 
-        // Grouped by external id, not slug: two jobs may reuse a slug in different languages and
-        // must not become each other's alternates. One entry per stored version (per locale,
-        // 0.2.0), each carrying the full hreflang set of its externalId.
-        $byJob = [];
-        foreach ($articles as $a) $byJob[$a['externalId']][] = $a;
         $articleDefaults = $s['pageDefaults']['article'] ?? Snapshot::DEFAULT_PAGE_DEFAULTS;
-        $urlOf = fn (array $a) => Snapshot::absoluteUrl($s, $a['lang'], Locale::versionPath($a));
         // The hub registers every published article as a snapshot page too; when it has, the page
         // is the entry (or, when noindexed, the reason there is none), so the article is skipped.
         $described = [];
         foreach ($snapshot['pages'] as $p) $described[rtrim(Snapshot::absoluteUrl($s, $p['lang'], $p['path']), '/')] = true;
-        foreach ($byJob as $group) {
-            $alternates = Locale::hreflang(self::sourceFirst($group), $urlOf, self::isLegacyGroup($group));
+        foreach ($jobs as [$group, $alternates]) {
             foreach ($group as $a) {
                 if (isset($described[rtrim($urlOf($a), '/')])) continue;
                 $out[] = [

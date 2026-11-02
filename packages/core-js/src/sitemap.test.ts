@@ -148,6 +148,25 @@ test('with no snapshot robots allows everything and lists nothing', () => {
   assert.equal(robotsTxt(null).trim(), 'User-agent: *\nAllow: /')
 })
 
+test('a snapshot page at a stored version URL takes the article hreflang set, not its page group', () => {
+  const asPage = (lang: string, path: string) => page({ key: 'article:9', type: 'article', lang, path, group: 'article:9' })
+  const versions = [
+    article({ lang: 'ar', slug: 'x', locale: 'ar-SA', lead: true }),
+    article({ lang: 'ar', slug: 'x', locale: 'ar-AE', lead: false }),
+    article({ lang: 'en', slug: 'x', locale: 'en-US', lead: true }),
+  ]
+  const entries = sitemapEntries(snap({ pages: [asPage('ar', '/ar/blog/x'), asPage('ar', '/ar-ae/blog/x/'), asPage('en', '/en/blog/x')] }), versions)
+  const alternates = {
+    'ar-SA': 'https://x.com/ar/blog/x', 'ar-AE': 'https://x.com/ar-ae/blog/x', 'en-US': 'https://x.com/en/blog/x',
+    ar: 'https://x.com/ar/blog/x', en: 'https://x.com/en/blog/x', 'x-default': 'https://x.com/ar/blog/x',
+  }
+  assert.deepEqual(entries.map((e) => e.loc), ['https://x.com/ar/blog/x', 'https://x.com/ar-ae/blog/x/', 'https://x.com/en/blog/x'])
+  for (const e of entries) {
+    assert.deepEqual(e.alternates, alternates)
+    assert.equal(e.lastmod, '2026-09-01')   // still the page's entry
+  }
+})
+
 test('an article the hub already lists as a snapshot page appears once, and a noindexed one not at all', () => {
   const asPage = page({ key: 'article:9:en', type: 'article', path: '/en/blog/hair', group: 'article:9' })
   const entries = sitemapEntries(snap({ pages: [asPage] }), [article(), article({ lang: 'ar', slug: 'hair-ar' })])
