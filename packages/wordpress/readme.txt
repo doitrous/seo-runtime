@@ -4,7 +4,7 @@ Tags: seo, redirects, sitemap, robots
 Requires at least: 6.0
 Tested up to: 6.7
 Requires PHP: 8.0
-Stable tag: 0.2.2
+Stable tag: 0.2.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -79,7 +79,8 @@ How the hub delivers articles depends on the site's adapter on the hub:
   `<site URL>/api/articles` with the site's runtime secret (the same as `SEO_HUB_SECRET`), and
   this plugin ingests and stores them. Use this when the plugin should receive the articles.
 * Adapter type `wordpress` (site URL, WordPress user, application password, category): the hub
-  creates real WordPress posts over the REST API, including Yoast/RankMath meta and hreflang.
+  creates real WordPress posts over the REST API, including Yoast/RankMath meta and hreflang,
+  and (from 0.2.3) their Polylang language and translation links.
   Articles do not go through this plugin's `/api/articles` in this mode; the plugin only serves
   meta/head tags, redirects, sitemap/robots and hreflang.
 
@@ -131,6 +132,12 @@ off a path; each article's `hreflang` array holds every alternate. The articles 
 after the plugin is updated.
 
 == Changelog ==
+
+= 0.2.3 =
+* Polylang: hub posts get their language (`seo_hub_lang`) and translation links
+  (`seo_hub_translations`) on `rest_after_insert_post`.
+* The hub adapter's Yoast/RankMath and `seo_hub_hreflang` meta keys are registered for REST.
+* Hub pages no longer get a second `<title>` from the theme or Polylang's hreflang links.
 
 = 0.2.0 =
 * Per-country pages (hub contract 1.20.0): `locale` on article items, storage per

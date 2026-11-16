@@ -3,6 +3,29 @@
 One version across every package (`@omary98/seo-runtime-core`, `-next`, `-express`,
 `doitrous/seo-runtime-laravel`, the `doitrous-seo` WordPress plugin).
 
+## 0.2.3 — WordPress: Polylang language and translations for hub posts, no duplicate head tags
+
+WordPress plugin only; the other packages are bumped to keep one version.
+
+- **Polylang.** Posts the hub's `wordpress` adapter writes over `/wp-json/wp/v2/posts` now get
+  their Polylang language and are linked as translations. The plugin registers two REST meta keys,
+  `seo_hub_lang` (the post's language) and `seo_hub_translations` (JSON `{lang: post id}`), and on
+  `rest_after_insert_post` calls `pll_set_post_language()` / `pll_save_post_translations()`. That
+  action fires after the request's meta is saved and before the response is built, so the
+  response's `link` is already the language's URL (`/en/...`). Languages Polylang does not have
+  are ignored; without Polylang nothing happens. Needs the hub adapter that sends these keys.
+- **Fix.** The Yoast/RankMath meta keys and `seo_hub_hreflang` the adapter writes are registered
+  for the REST API. The docs said the plugin did this since it replaced the `seo-hub.php`
+  mu-plugin, but it did not, so WordPress silently dropped them.
+- **Fix: duplicate `<title>`.** On a hub page of a site without Yoast/Rank Math, the theme's
+  title-tag support printed a second `<title>`: an empty `pre_get_document_title` does not
+  short-circuit core. `_wp_render_title_tag` is now removed on hub pages.
+- **Fix: duplicate hreflang with Polylang.** On a hub page where the plugin prints alternates,
+  Polylang's own `<link rel="alternate" hreflang>` set is emptied (`pll_rel_hreflang_attributes`).
+- Both are done on `wp`, before `wp_head` runs: core's title tag and Polylang's hreflang share
+  `wp_head` priority 1 with the plugin's head, and a callback removed while its priority is
+  running still fires.
+
 ## 0.2.2 — per-country article URLs name themselves in the sitemap
 
 - **Fix.** A snapshot page whose URL is a stored article version now carries that article's full

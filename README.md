@@ -150,7 +150,10 @@ Pick one:
   Yoast/RankMath meta and a per-post hreflang map. Articles do **not** go through the plugin's
   `/api/articles` here, so in this mode the plugin only serves meta/head tags, redirects,
   sitemap/robots and hreflang for what WordPress already owns. Create the application password
-  under Users → your admin user → Application Passwords.
+  under Users → your admin user → Application Passwords. The plugin registers those meta keys for
+  the REST API (WordPress drops unregistered ones) and, from 0.2.3, on a Polylang site sets each
+  post's language from `seo_hub_lang` and links the languages as translations from
+  `seo_hub_translations` (Polylang free takes no language over REST on its own).
 
 ## Per-country pages (0.2.0)
 

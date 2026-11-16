@@ -45,6 +45,12 @@ function wp_json_encode($data, int $options = 0): string|false {
     return json_encode($data, $options);
 }
 
+// Hook calls made by head.php's silencing, recorded instead of applied.
+$GLOBALS['__hooks'] = [];
+function remove_action(string $hook, $cb, int $priority = 10): bool { $GLOBALS['__hooks'][] = ['remove', $hook, $cb, $priority]; return true; }
+function remove_all_actions(string $hook): bool { $GLOBALS['__hooks'][] = ['remove_all', $hook]; return true; }
+function add_filter(string $hook, $cb, int $priority = 10, int $args = 1): bool { $GLOBALS['__hooks'][] = ['add', $hook, is_string($cb) ? $cb : 'closure', $priority]; return true; }
+
 // --- load the plugin's includes ---------------------------------------------------------
 
 require_once __DIR__ . '/../includes/store.php';
@@ -193,6 +199,15 @@ doitrous_seo_take_hits([['source' => '/old-page', 'hits' => 999]]);
 $floor = [];
 foreach (doitrous_seo_peek_hits() as $h) $floor[$h['source']] = $h['hits'];
 check('take_hits never drives a counter below zero', !isset($floor['/old-page']));
+
+// === silencing on hub pages: core title tag and Polylang hreflang ==========================
+
+doitrous_seo_silence_other_seo_plugins(['alternates' => ['en' => 'https://example.com/en/a']]);
+check("core's <title> (_wp_render_title_tag, wp_head 1) is removed", in_array(['remove', 'wp_head', '_wp_render_title_tag', 1], $GLOBALS['__hooks'], true));
+check("Polylang's hreflang is emptied where we print alternates", in_array(['add', 'pll_rel_hreflang_attributes', '__return_empty_array', 10], $GLOBALS['__hooks'], true));
+$GLOBALS['__hooks'] = [];
+doitrous_seo_silence_other_seo_plugins(['alternates' => []]);
+check("Polylang's hreflang is left alone where we print none", !in_array('pll_rel_hreflang_attributes', array_column($GLOBALS['__hooks'], 1), true));
 
 // --- summary -------------------------------------------------------------------------------
 
