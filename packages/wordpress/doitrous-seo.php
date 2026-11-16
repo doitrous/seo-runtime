@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Doitrous SEO
  * Description: seo-hub runtime for WordPress. The hub decides page SEO, redirects, sitemap and robots; this plugin renders them.
- * Version: 0.2.2
+ * Version: 0.2.3
  * Requires at least: 6.0
  * Requires PHP: 8.0
  *
@@ -21,13 +21,13 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('DOITROUS_SEO_VERSION', '0.2.2');
+define('DOITROUS_SEO_VERSION', '0.2.3');
 define('DOITROUS_SEO_DIR', plugin_dir_path(__FILE__));
 define('DOITROUS_SEO_MAX_BODY', 2 * 1024 * 1024);
 
 // redirects.php, sitemap.php and articles.php ship in B12b; file_exists keeps this plugin
 // bootable with only the four B12 files present, and B12b needs no change here at all.
-foreach (['store', 'locale', 'resolve', 'entities', 'approval', 'redirects', 'sitemap', 'articles', 'head', 'routes'] as $part) {
+foreach (['store', 'locale', 'resolve', 'entities', 'approval', 'redirects', 'sitemap', 'articles', 'head', 'rest-meta', 'routes'] as $part) {
     $file = DOITROUS_SEO_DIR . "includes/$part.php";
     if (file_exists($file)) require_once $file;
 }
@@ -73,7 +73,10 @@ if (function_exists('doitrous_seo_register_admin_menu')) {
 if (function_exists('doitrous_seo_apply_redirect')) {
     add_action('template_redirect', 'doitrous_seo_apply_redirect', 1);
 }
+add_action('wp', 'doitrous_seo_take_over_head');
 add_action('wp_head', 'doitrous_seo_print_head', 1);
+add_action('init', 'doitrous_seo_register_rest_meta');
+add_action('rest_after_insert_post', 'doitrous_seo_apply_polylang');
 add_action('doitrous_seo_pull', 'doitrous_seo_pull_snapshot');
 add_action('doitrous_seo_health', 'doitrous_seo_send_health');
 

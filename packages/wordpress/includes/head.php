@@ -6,8 +6,10 @@ if (!defined('ABSPATH')) exit;
  * Yoast and Rank Math both print a title, a description, canonical, OG and Twitter tags on
  * wp_head. On a page the hub owns, theirs would duplicate ours — so their output is switched off
  * for that request only, by name and priority, leaving their behaviour untouched everywhere else.
+ * So is core's own <title> (a theme with title-tag support prints one through
+ * _wp_render_title_tag) and, where we print alternates, Polylang's hreflang links.
  */
-function doitrous_seo_silence_other_seo_plugins(): void {
+function doitrous_seo_silence_other_seo_plugins(array $seo): void {
     // Yoast: the whole frontend head is one class, removed in one line.
     if (class_exists('WPSEO_Frontend')) {
         remove_action('wp_head', [WPSEO_Frontend::get_instance(), 'head'], 1);
@@ -17,15 +19,37 @@ function doitrous_seo_silence_other_seo_plugins(): void {
     remove_all_actions('rank_math/head');
     // Both filter the document title; ours is printed directly.
     add_filter('pre_get_document_title', fn () => '', 99);
+    // An empty pre_get_document_title is "not short-circuited", so core still prints its title.
+    remove_action('wp_head', '_wp_render_title_tag', 1);
+    if ($seo['alternates']) add_filter('pll_rel_hreflang_attributes', '__return_empty_array');
+}
+
+/** The resolved SEO of this request's path when the hub owns it, else null. */
+function doitrous_seo_hub_seo(): ?array {
+    if (is_admin()) return null;
+    $path = doitrous_seo_normalize_path(parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/');
+    $lang = doitrous_seo_site_lang();
+    if (!doitrous_seo_get_page($path, $lang)) return null;   // not a hub page: leave the site alone
+
+    return doitrous_seo_resolve($path, $lang);
+}
+
+/**
+ * Runs on `wp`, before wp_head starts. Core's _wp_render_title_tag (registered first, in
+ * default-filters.php) and Polylang's hreflang printer share wp_head priority 1 with
+ * doitrous_seo_print_head, and WP_Hook walks a priority's callbacks with a by-value foreach, so
+ * removing one from inside that priority does not stop it — it has to go before wp_head fires.
+ */
+function doitrous_seo_take_over_head(): void {
+    $seo = doitrous_seo_hub_seo();
+    if ($seo !== null) doitrous_seo_silence_other_seo_plugins($seo);
 }
 
 function doitrous_seo_print_head(): void {
-    if (is_admin()) return;
-    $path = doitrous_seo_normalize_path(parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/');
-    $lang = doitrous_seo_site_lang();
-    if (!doitrous_seo_get_page($path, $lang)) return;   // not a hub page: leave the site alone
-    doitrous_seo_silence_other_seo_plugins();
-    echo doitrous_seo_head_tags(doitrous_seo_resolve($path, $lang));
+    $seo = doitrous_seo_hub_seo();
+    if ($seo === null) return;
+    doitrous_seo_silence_other_seo_plugins($seo);   // again, for anything hooked after `wp`
+    echo doitrous_seo_head_tags($seo);
 }
 
 function doitrous_seo_head_tags(array $seo): string {
