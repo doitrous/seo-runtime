@@ -210,6 +210,19 @@ $GLOBALS['__hooks'] = [];
 doitrous_seo_silence_other_seo_plugins(['alternates' => []]);
 check("Polylang's hreflang is left alone where we print none", !in_array('pll_rel_hreflang_attributes', array_column($GLOBALS['__hooks'], 1), true));
 
+// === GA4 on pages the hub does not own ===================================================
+
+function is_admin(): bool { return false; }
+function doitrous_seo_site_lang(): string { return 'en'; }
+$GLOBALS['__wp_options']['doitrous_seo_snapshot']['settings']['ga4MeasurementId'] = 'G-TEST123';
+$_SERVER['REQUEST_URI'] = '/not-a-hub-page/';
+ob_start(); doitrous_seo_print_head(); $notHub = ob_get_clean();
+check('a page the hub does not own still gets the GA4 snippet', str_contains($notHub, "gtag('config','G-TEST123')"));
+check('a page the hub does not own gets nothing else', !str_contains($notHub, '<title') && !str_contains($notHub, 'canonical'));
+unset($GLOBALS['__wp_options']['doitrous_seo_snapshot']['settings']['ga4MeasurementId']);
+ob_start(); doitrous_seo_print_head(); $noId = ob_get_clean();
+check('no GA4 id, nothing printed on a page the hub does not own', $noId === '');
+
 // --- summary -------------------------------------------------------------------------------
 
 if ($failures) {

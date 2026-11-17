@@ -3,6 +3,14 @@
 One version across every package (`@omary98/seo-runtime-core`, `-next`, `-express`,
 `doitrous/seo-runtime-laravel`, the `doitrous-seo` WordPress plugin).
 
+## 0.2.5 — WordPress: GA4 on every page
+
+WordPress plugin only; the other packages are bumped to keep one version.
+
+- When the hub sets `ga4MeasurementId`, the gtag snippet is now printed on every front-end page.
+  Before, it came only with the hub's head tags, so pages the hub doesn't own (a Polylang
+  site's other language, theme pages) were not tracked. Nothing else is added to those pages.
+
 ## 0.2.4 — WordPress: no second canonical on hub pages
 
 WordPress plugin only; the other packages are bumped to keep one version.

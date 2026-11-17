@@ -4,7 +4,7 @@ Tags: seo, redirects, sitemap, robots
 Requires at least: 6.0
 Tested up to: 6.7
 Requires PHP: 8.0
-Stable tag: 0.2.4
+Stable tag: 0.2.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -132,6 +132,10 @@ off a path; each article's `hreflang` array holds every alternate. The articles 
 after the plugin is updated.
 
 == Changelog ==
+
+= 0.2.5 =
+* The GA4 snippet (when the hub sets a measurement id) is printed on every front-end page, not
+  only on pages the hub owns, so the whole site is tracked.
 
 = 0.2.4 =
 * Hub pages no longer get a second canonical from WordPress core (`rel_canonical`).
