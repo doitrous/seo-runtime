@@ -18,6 +18,11 @@ if (!defined('ABSPATH')) exit;
 // plugin's default (the site's own single language) would silently skip the 'ar' half.
 add_filter('doitrous_seo_supported_languages', fn () => ['en', 'ar']);
 
+// The suite is shared by every stack and asserts the contract's URLs exactly (`${BASE}/en/a`);
+// a real WordPress site follows its permalink structure instead (resolve.php), which the
+// plugin's unit tests cover.
+add_filter('doitrous_seo_trailing_slash', '__return_false');
+
 add_action('init', function () {
     $changed = false;
 
