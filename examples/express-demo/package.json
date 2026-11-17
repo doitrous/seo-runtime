@@ -4,8 +4,8 @@
   "type": "module",
   "scripts": { "start": "node server.mjs" },
   "dependencies": {
-    "@omary98/seo-runtime-core": "0.2.3",
-    "@omary98/seo-runtime-express": "0.2.3",
+    "@omary98/seo-runtime-core": "0.2.4",
+    "@omary98/seo-runtime-express": "0.2.4",
     "express": "^5.2.1"
   }
 }

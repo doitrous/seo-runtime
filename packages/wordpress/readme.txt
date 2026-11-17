@@ -4,7 +4,7 @@ Tags: seo, redirects, sitemap, robots
 Requires at least: 6.0
 Tested up to: 6.7
 Requires PHP: 8.0
-Stable tag: 0.2.3
+Stable tag: 0.2.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -132,6 +132,9 @@ off a path; each article's `hreflang` array holds every alternate. The articles 
 after the plugin is updated.
 
 == Changelog ==
+
+= 0.2.4 =
+* Hub pages no longer get a second canonical from WordPress core (`rel_canonical`).
 
 = 0.2.3 =
 * Polylang: hub posts get their language (`seo_hub_lang`) and translation links

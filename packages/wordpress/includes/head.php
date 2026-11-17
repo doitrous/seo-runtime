@@ -7,7 +7,7 @@ if (!defined('ABSPATH')) exit;
  * wp_head. On a page the hub owns, theirs would duplicate ours — so their output is switched off
  * for that request only, by name and priority, leaving their behaviour untouched everywhere else.
  * So is core's own <title> (a theme with title-tag support prints one through
- * _wp_render_title_tag) and, where we print alternates, Polylang's hreflang links.
+ * _wp_render_title_tag), core's rel_canonical and, where we print alternates, Polylang's hreflang links.
  */
 function doitrous_seo_silence_other_seo_plugins(array $seo): void {
     // Yoast: the whole frontend head is one class, removed in one line.
@@ -21,6 +21,8 @@ function doitrous_seo_silence_other_seo_plugins(array $seo): void {
     add_filter('pre_get_document_title', fn () => '', 99);
     // An empty pre_get_document_title is "not short-circuited", so core still prints its title.
     remove_action('wp_head', '_wp_render_title_tag', 1);
+    // Core's own canonical on singular pages (wp_head 10); ours is always printed.
+    remove_action('wp_head', 'rel_canonical');
     if ($seo['alternates']) add_filter('pll_rel_hreflang_attributes', '__return_empty_array');
 }
 

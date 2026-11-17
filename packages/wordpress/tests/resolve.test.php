@@ -204,6 +204,7 @@ check('take_hits never drives a counter below zero', !isset($floor['/old-page'])
 
 doitrous_seo_silence_other_seo_plugins(['alternates' => ['en' => 'https://example.com/en/a']]);
 check("core's <title> (_wp_render_title_tag, wp_head 1) is removed", in_array(['remove', 'wp_head', '_wp_render_title_tag', 1], $GLOBALS['__hooks'], true));
+check("core's canonical (rel_canonical, wp_head 10) is removed", in_array(['remove', 'wp_head', 'rel_canonical', 10], $GLOBALS['__hooks'], true));
 check("Polylang's hreflang is emptied where we print alternates", in_array(['add', 'pll_rel_hreflang_attributes', '__return_empty_array', 10], $GLOBALS['__hooks'], true));
 $GLOBALS['__hooks'] = [];
 doitrous_seo_silence_other_seo_plugins(['alternates' => []]);

@@ -3,6 +3,13 @@
 One version across every package (`@omary98/seo-runtime-core`, `-next`, `-express`,
 `doitrous/seo-runtime-laravel`, the `doitrous-seo` WordPress plugin).
 
+## 0.2.4 — WordPress: no second canonical on hub pages
+
+WordPress plugin only; the other packages are bumped to keep one version.
+
+- On a page the hub owns, core's `rel_canonical` (wp_head 10) is removed, so a singular page
+  (a static front page, a post) no longer carries core's canonical next to ours.
+
 ## 0.2.3 — WordPress: Polylang language and translations for hub posts, no duplicate head tags
 
 WordPress plugin only; the other packages are bumped to keep one version.
