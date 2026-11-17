@@ -4,7 +4,7 @@ Tags: seo, redirects, sitemap, robots
 Requires at least: 6.0
 Tested up to: 6.7
 Requires PHP: 8.0
-Stable tag: 0.2.5
+Stable tag: 0.2.6
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -132,6 +132,10 @@ off a path; each article's `hreflang` array holds every alternate. The articles 
 after the plugin is updated.
 
 == Changelog ==
+
+= 0.2.6 =
+* Canonical, hreflang, og:url and sitemap URLs follow the permalink structure's trailing slash,
+  so none of them 301s. Off switch: `add_filter('doitrous_seo_trailing_slash', '__return_false')`.
 
 = 0.2.5 =
 * The GA4 snippet (when the hub sets a measurement id) is printed on every front-end page, not

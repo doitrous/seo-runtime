@@ -26,6 +26,7 @@ function update_option(string $key, $value, $autoload = null): bool {
 }
 
 function apply_filters(string $tag, $value, ...$args) {
+    if ($tag === 'doitrous_seo_trailing_slash' && !empty($GLOBALS['__slash_off'])) return false;
     return $value;
 }
 
@@ -222,6 +223,21 @@ check('a page the hub does not own gets nothing else', !str_contains($notHub, '<
 unset($GLOBALS['__wp_options']['doitrous_seo_snapshot']['settings']['ga4MeasurementId']);
 ob_start(); doitrous_seo_print_head(); $noId = ob_get_clean();
 check('no GA4 id, nothing printed on a page the hub does not own', $noId === '');
+
+// === trailing slash from the permalink structure ==========================================
+
+check('without WordPress loaded, paths are left as stored', doitrous_seo_absolute_url(['baseUrls' => ['ar' => 'https://ex.com']], 'ar', '/a-post') === 'https://ex.com/a-post');
+// Declared here, conditionally, so it exists only for the checks below (PHP hoists unconditional ones).
+if (!function_exists('user_trailingslashit')) {
+    function user_trailingslashit(string $s): string { return rtrim($s, '/') . '/'; } // a "/%postname%/" site
+}
+$base = ['baseUrls' => ['ar' => 'https://ex.com', 'en' => 'https://ex.com/']];
+check('a slash permalink structure gets the trailing slash', doitrous_seo_absolute_url($base, 'ar', '/a-post') === 'https://ex.com/a-post/');
+check('a path that already has one is not doubled', doitrous_seo_absolute_url($base, 'en', '/en/home/') === 'https://ex.com/en/home/');
+check('the root stays a single slash', doitrous_seo_absolute_url($base, 'ar', '/') === 'https://ex.com/');
+$GLOBALS['__slash_off'] = true;
+check('the doitrous_seo_trailing_slash filter turns it off', doitrous_seo_absolute_url($base, 'ar', '/a-post') === 'https://ex.com/a-post');
+unset($GLOBALS['__slash_off']);
 
 // --- summary -------------------------------------------------------------------------------
 

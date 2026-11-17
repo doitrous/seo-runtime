@@ -3,6 +3,16 @@
 One version across every package (`@omary98/seo-runtime-core`, `-next`, `-express`,
 `doitrous/seo-runtime-laravel`, the `doitrous-seo` WordPress plugin).
 
+## 0.2.6 — WordPress: URLs follow the permalink structure's trailing slash
+
+WordPress plugin only; the other packages are bumped to keep one version.
+
+- `doitrous_seo_absolute_url` (every canonical, hreflang, `og:url` and sitemap `<loc>`) runs the
+  path through `user_trailingslashit()`. The hub stores paths without a trailing slash, so on a
+  `/%postname%/` site every one of those URLs answered with a 301 to the slashed form.
+- The `doitrous_seo_trailing_slash` filter (default true) turns it off. The wp-env conformance
+  seed turns it off, because the shared suite asserts the contract's URLs exactly.
+
 ## 0.2.5 — WordPress: GA4 on every page
 
 WordPress plugin only; the other packages are bumped to keep one version.

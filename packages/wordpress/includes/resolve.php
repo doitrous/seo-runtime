@@ -22,6 +22,13 @@ function doitrous_seo_normalize_path(string $path): string {
 function doitrous_seo_absolute_url(array $settings, string $lang, string $path): string {
     $urls = $settings['baseUrls'] ?? [];
     $origin = rtrim($urls[$lang] ?? (reset($urls) ?: ''), '/');
+    // The hub stores paths without a trailing slash; WordPress serves (and 301s to) whatever its
+    // permalink structure says. Match it, so canonical, hreflang and sitemap URLs never redirect.
+    // The plugin's own /authors, /help and /tools routes answer either form. Off switch:
+    // add_filter('doitrous_seo_trailing_slash', '__return_false').
+    if ($path !== '' && $path !== '/' && function_exists('user_trailingslashit') && apply_filters('doitrous_seo_trailing_slash', true)) {
+        $path = user_trailingslashit($path);
+    }
 
     return $origin === '' ? $path : $origin . (str_starts_with($path, '/') ? '' : '/') . $path;
 }
