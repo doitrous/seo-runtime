@@ -49,7 +49,11 @@ function doitrous_seo_take_over_head(): void {
 
 function doitrous_seo_print_head(): void {
     $seo = doitrous_seo_hub_seo();
-    if ($seo === null) return;
+    if ($seo === null) {
+        // Not a hub page: the site keeps its own head, but GA4 still counts the visit.
+        if (!is_admin()) echo doitrous_seo_gtag_snippet(doitrous_seo_get_settings()['ga4MeasurementId'] ?? null);
+        return;
+    }
     doitrous_seo_silence_other_seo_plugins($seo);   // again, for anything hooked after `wp`
     echo doitrous_seo_head_tags($seo);
 }
